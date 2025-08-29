@@ -1,4 +1,12 @@
-command: [
-  "uvicorn",
-  "server.app:app"
-]
+command: ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+env:
+  - name: DB_HOST
+    value: "instance-1a754ee1-c83f-4de1-a321-684bd7230e59.database.cloud.databricks.com"
+  - name: DB_PORT
+    value: "5432"
+  - name: DB_NAME
+    value: "databricks_postgres"
+  - name: DB_USER
+    value: "lakebase_demo_app"
+  - name: DB_PASSWORD
+    value: "lakebasedemo2025"

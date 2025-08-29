@@ -1,9 +1,9 @@
-import { WelcomePage } from "./pages/WelcomePage";
+import OrderManagement from "./pages/OrderManagement";
 
 function App() {
   return (
     <div className="min-h-screen bg-background">
-      <WelcomePage />
+      <OrderManagement />
     </div>
   );
 }

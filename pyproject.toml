@@ -20,6 +20,8 @@ dependencies = [
     "mlflow[databricks]>=3.1.1",
     "debugpy>=1.8.15",
     "python-dotenv>=1.1.1",
+    "databricks-sql-connector>=4.0.5",
+    "psycopg2-binary>=2.9.10",
 ]
 requires-python = ">=3.11"
 

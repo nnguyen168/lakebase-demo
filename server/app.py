@@ -44,7 +44,7 @@ app = FastAPI(
 
 app.add_middleware(
   CORSMiddleware,
-  allow_origins=['http://localhost:3000', 'http://127.0.0.1:3000'],
+  allow_origins=['*'],  # Allow all origins in production since frontend and backend are on same domain
   allow_credentials=True,
   allow_methods=['*'],
   allow_headers=['*'],
@@ -56,7 +56,39 @@ app.include_router(router, prefix='/api', tags=['api'])
 @app.get('/health')
 async def health():
   """Health check endpoint."""
-  return {'status': 'healthy'}
+  # Try to check database connection
+  try:
+    from server.db_selector import db
+    # Try a simple query
+    result = db.execute_query("SELECT 1 as test", None)
+    db_status = 'connected'
+    db_type = 'postgres' if 'LakebasePostgres' in str(type(db)) else 'mock'
+  except Exception as e:
+    db_status = f'error: {str(e)}'
+    db_type = 'unknown'
+  
+  return {
+    'status': 'healthy',
+    'database': db_status,
+    'db_type': db_type
+  }
+
+
+@app.get('/debug/env')
+async def debug_env():
+  """Debug endpoint to check environment variables."""
+  return {
+    'db_configured': bool(os.getenv('DB_HOST')),
+    'db_host_present': bool(os.getenv('DB_HOST')),
+    'db_user_present': bool(os.getenv('DB_USER')),
+    'db_password_present': bool(os.getenv('DB_PASSWORD')),
+    'db_name': os.getenv('DB_NAME', 'Not set'),
+    'using_real_db': all([
+      os.getenv('DB_HOST'),
+      os.getenv('DB_USER'),
+      os.getenv('DB_PASSWORD')
+    ])
+  }
 
 
 # ============================================================================
