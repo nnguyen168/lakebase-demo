@@ -140,35 +140,24 @@ async def get_order(order_id: int):
 
 @router.post("/", response_model=Order)
 async def create_order(order: OrderCreate):
-    """Create a new order."""
+    """Create a new order with inventory transaction."""
     try:
         # Generate order number
         order_number = f"ORD-{datetime.now().strftime('%Y%m%d')}-{datetime.now().strftime('%H%M%S')}"
         
-        query = """
-            INSERT INTO orders (
-                order_number, product_id, customer_id, store_id, 
-                quantity, requested_by, status, notes
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        
-        params = [
-            order_number,
-            order.product_id,
-            order.customer_id,
-            order.store_id,
-            order.quantity,
-            order.requested_by,
-            order.status.value,
-            order.notes
-        ]
-        
-        db.execute_update(query, params)
-        
-        # Get the created order
-        result = db.execute_query(
-            "SELECT * FROM orders WHERE order_number = %s", 
-            [order_number]
+        # Execute transaction with inventory update
+        result = db.execute_order_transaction(
+            "create", 
+            order_data={
+                "order_number": order_number,
+                "product_id": order.product_id,
+                "customer_id": order.customer_id,
+                "store_id": order.store_id,
+                "quantity": order.quantity,
+                "requested_by": order.requested_by,
+                "status": order.status.value,
+                "notes": order.notes
+            }
         )
         
         if result:
@@ -233,22 +222,39 @@ async def update_order(order_id: int, order_update: OrderUpdate):
 
 @router.delete("/{order_id}")
 async def delete_order(order_id: int):
-    """Delete an order (soft delete by setting status to cancelled)."""
+    """Cancel an order with inventory rollback."""
     try:
-        query = """
-            UPDATE orders 
-            SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP()
-            WHERE order_id = %s
+        # Get order details first for inventory rollback
+        order_query = """
+            SELECT o.*, p.name as product_name
+            FROM orders o
+            JOIN products p ON o.product_id = p.product_id
+            WHERE o.order_id = %s
         """
         
-        rows_affected = db.execute_update(query, [order_id])
+        order_result = db.execute_query(order_query, [order_id])
         
-        if rows_affected == 0:
+        if not order_result:
             raise HTTPException(status_code=404, detail="Order not found")
+        
+        order_data = order_result[0]
+        
+        # Don't allow canceling already cancelled or delivered orders
+        if order_data['status'] in ['cancelled', 'delivered']:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot cancel {order_data['status']} order"
+            )
+        
+        # Execute transaction with inventory rollback
+        db.execute_order_transaction(
+            "cancel", 
+            order_data=order_data
+        )
         
         return {"message": "Order cancelled successfully"}
     
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to cancel order: {str(e)}")

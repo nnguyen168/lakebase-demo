@@ -10,9 +10,22 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Package, ShoppingCart } from 'lucide-react';
+import { 
+  AlertCircle, Package, ShoppingCart, Plus, Edit, Trash2,
+  Clock, CheckCircle, Truck, Package2, XCircle, TrendingUp,
+  TrendingDown, AlertTriangle
+} from 'lucide-react';
+import CreateOrderModal from '@/components/CreateOrderModal';
+import EditOrderModal from '@/components/EditOrderModal';
+import ForecastModal from '@/components/ForecastModal';
 
 interface OrderData {
   order_id: number;
@@ -56,6 +69,13 @@ const OrderManagement: React.FC = () => {
   const [stockKPI, setStockKPI] = useState<StockKPI | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Modal states
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<OrderData | null>(null);
+  const [isForecastModalOpen, setIsForecastModalOpen] = useState(false);
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryForecastData | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -96,50 +116,82 @@ const OrderManagement: React.FC = () => {
     }
   };
 
-  const getStatusBadgeVariant = (status: string) => {
+  const getStatusBadgeStyles = (status: string) => {
     switch (status.toLowerCase()) {
       case 'pending':
-        return 'secondary';
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200',
+          icon: Clock
+        };
       case 'approved':
-        return 'default';
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200',
+          icon: CheckCircle
+        };
       case 'shipped':
-        return 'outline';
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200',
+          icon: Truck
+        };
       case 'delivered':
-        return 'default';
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200',
+          icon: Package2
+        };
       case 'cancelled':
-        return 'destructive';
+        return {
+          variant: 'destructive' as const,
+          className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200',
+          icon: XCircle
+        };
       default:
-        return 'secondary';
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200',
+          icon: Package
+        };
     }
   };
 
-  const getInventoryStatusBadgeVariant = (status: string) => {
+  const getInventoryStatusBadgeStyles = (status: string) => {
     switch (status.toLowerCase()) {
       case 'in_stock':
-        return 'default';
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200',
+          icon: Package
+        };
       case 'low_stock':
-        return 'secondary';
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200',
+          icon: AlertTriangle
+        };
       case 'out_of_stock':
-        return 'destructive';
+        return {
+          variant: 'destructive' as const,
+          className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200',
+          icon: AlertTriangle
+        };
       case 'reorder_needed':
-        return 'destructive';
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200',
+          icon: TrendingDown
+        };
       default:
-        return 'secondary';
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200',
+          icon: Package
+        };
     }
   };
 
-  const getActionButtonVariant = (action: string) => {
-    switch (action) {
-      case 'Urgent Reorder':
-        return 'destructive';
-      case 'Reorder Now':
-        return 'secondary';
-      case 'Monitor':
-        return 'outline';
-      default:
-        return 'ghost';
-    }
-  };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -147,6 +199,73 @@ const OrderManagement: React.FC = () => {
       month: 'short',
       day: 'numeric',
     });
+  };
+
+  const handleEditOrder = (order: OrderData) => {
+    setSelectedOrder(order);
+    setIsEditModalOpen(true);
+  };
+
+  const handleOrderUpdated = () => {
+    fetchData(); // Refresh all data
+  };
+
+  const handleOrderCreated = () => {
+    fetchData(); // Refresh all data
+  };
+
+  const handleSeeForecast = (item: InventoryForecastData) => {
+    setSelectedInventoryItem(item);
+    setIsForecastModalOpen(true);
+  };
+
+  const getStatusTooltip = (status: string): string => {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'Order is awaiting approval from management';
+      case 'approved':
+        return 'Order has been approved and is ready for fulfillment';
+      case 'shipped':
+        return 'Order has been shipped and is in transit to the customer';
+      case 'delivered':
+        return 'Order has been successfully delivered to the customer';
+      case 'cancelled':
+        return 'Order has been cancelled and inventory has been restored';
+      default:
+        return 'Order status';
+    }
+  };
+
+  const renderStatusBadge = (status: string, showIcon: boolean = true, showTooltip: boolean = false) => {
+    const statusStyle = getStatusBadgeStyles(status);
+    const StatusIcon = statusStyle.icon;
+    
+    const badge = (
+      <Badge 
+        variant={statusStyle.variant}
+        className={`${statusStyle.className} ${showIcon ? 'flex items-center gap-1' : ''} w-fit cursor-default`}
+      >
+        {showIcon && <StatusIcon className="h-3 w-3" />}
+        {status}
+      </Badge>
+    );
+
+    if (showTooltip) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {badge}
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{getStatusTooltip(status)}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    return badge;
   };
 
   if (loading) {
@@ -184,6 +303,29 @@ const OrderManagement: React.FC = () => {
         </TabsList>
 
         <TabsContent value="order-management" className="space-y-6">
+          {/* Order Status Legend */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Order Status Guide</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3">
+                {[
+                  { status: 'pending', description: 'Awaiting approval' },
+                  { status: 'approved', description: 'Ready for fulfillment' },
+                  { status: 'shipped', description: 'In transit' },
+                  { status: 'delivered', description: 'Completed successfully' },
+                  { status: 'cancelled', description: 'Order cancelled' }
+                ].map(({ status, description }) => (
+                  <div key={status} className="flex items-center gap-2">
+                    {renderStatusBadge(status)}
+                    <span className="text-sm text-muted-foreground">{description}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* KPI Cards */}
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
@@ -246,10 +388,18 @@ const OrderManagement: React.FC = () => {
           {/* Orders Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Recent Orders</CardTitle>
-              <CardDescription>
-                Manage and track your orders
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Recent Orders</CardTitle>
+                  <CardDescription>
+                    Manage and track your orders
+                  </CardDescription>
+                </div>
+                <Button onClick={() => setIsCreateModalOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Order
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -262,6 +412,7 @@ const OrderManagement: React.FC = () => {
                     <TableHead>Requested By</TableHead>
                     <TableHead>Order Date</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -274,9 +425,19 @@ const OrderManagement: React.FC = () => {
                       <TableCell>{order.requested_by}</TableCell>
                       <TableCell>{formatDate(order.order_date)}</TableCell>
                       <TableCell>
-                        <Badge variant={getStatusBadgeVariant(order.status)}>
-                          {order.status}
-                        </Badge>
+                        {renderStatusBadge(order.status, true, true)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleEditOrder(order)}
+                            disabled={order.status === 'cancelled'}
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -315,16 +476,29 @@ const OrderManagement: React.FC = () => {
                       <TableCell>{item.stock}</TableCell>
                       <TableCell>{item.forecast_30_days}</TableCell>
                       <TableCell>
-                        <Badge variant={getInventoryStatusBadgeVariant(item.status)}>
-                          {item.status.replace('_', ' ')}
-                        </Badge>
+                        {(() => {
+                          const statusStyle = getInventoryStatusBadgeStyles(item.status);
+                          const StatusIcon = statusStyle.icon;
+                          return (
+                            <Badge 
+                              variant={statusStyle.variant}
+                              className={`${statusStyle.className} flex items-center gap-1 w-fit`}
+                            >
+                              <StatusIcon className="h-3 w-3" />
+                              {item.status.replace('_', ' ')}
+                            </Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Button
                           size="sm"
-                          variant={getActionButtonVariant(item.action)}
+                          variant="outline"
+                          onClick={() => handleSeeForecast(item)}
+                          className="flex items-center gap-2"
                         >
-                          {item.action}
+                          <TrendingUp className="h-3 w-3" />
+                          See Forecast
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -335,6 +509,26 @@ const OrderManagement: React.FC = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      
+      {/* Modals */}
+      <CreateOrderModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onOrderCreated={handleOrderCreated}
+      />
+      
+      <EditOrderModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onOrderUpdated={handleOrderUpdated}
+        order={selectedOrder}
+      />
+      
+      <ForecastModal
+        isOpen={isForecastModalOpen}
+        onClose={() => setIsForecastModalOpen(false)}
+        item={selectedInventoryItem}
+      />
     </div>
   );
 };

@@ -269,6 +269,162 @@ class LakebasePostgresConnection:
         
         logger.info("Sample data seeded successfully")
     
+    def execute_order_transaction(self, action: str, order_data: dict):
+        """Execute order transaction with inventory updates."""
+        with self.get_cursor(dict_cursor=True) as cursor:
+            if action == "create":
+                return self._create_order_with_inventory(cursor, order_data)
+            elif action == "cancel":
+                return self._cancel_order_with_inventory(cursor, order_data)
+            else:
+                raise ValueError(f"Unknown action: {action}")
+    
+    def _create_order_with_inventory(self, cursor, order_data):
+        """Create order and update inventory within transaction."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # 1. Insert order
+            order_query = """
+                INSERT INTO orders (
+                    order_number, product_id, customer_id, store_id, 
+                    quantity, requested_by, status, notes
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING order_id
+            """
+            
+            cursor.execute(order_query, [
+                order_data["order_number"],
+                order_data["product_id"],
+                order_data["customer_id"],
+                order_data["store_id"],
+                order_data["quantity"],
+                order_data["requested_by"],
+                order_data["status"],
+                order_data["notes"]
+            ])
+            
+            order_result = cursor.fetchone()
+            order_id = order_result['order_id']
+            logger.info(f"Created order {order_id}")
+            
+            # 2. Update inventory forecast (decrease stock)
+            inventory_update = """
+                UPDATE inventory_forecast 
+                SET current_stock = current_stock - %s,
+                    last_updated = CURRENT_TIMESTAMP()
+                WHERE product_id = %s AND store_id = %s
+            """
+            
+            cursor.execute(inventory_update, [
+                order_data["quantity"],
+                order_data["product_id"],
+                order_data["store_id"]
+            ])
+            
+            # 3. Log inventory transaction
+            history_insert = """
+                INSERT INTO inventory_history (
+                    product_id, store_id, quantity_change, transaction_type,
+                    reference_id, notes, balance_after, created_by
+                ) VALUES (
+                    %s, %s, %s, 'OUT', %s, %s, 
+                    (SELECT current_stock FROM inventory_forecast 
+                     WHERE product_id = %s AND store_id = %s),
+                    %s
+                )
+            """
+            
+            cursor.execute(history_insert, [
+                order_data["product_id"],
+                order_data["store_id"],
+                -order_data["quantity"],  # Negative for outgoing
+                order_data["order_number"],
+                f"Order created: {order_data['order_number']}",
+                order_data["product_id"],
+                order_data["store_id"],
+                order_data["requested_by"]
+            ])
+            
+            logger.info(f"Updated inventory for order {order_data['order_number']}")
+            
+            # 4. Return created order with details
+            final_query = """
+                SELECT o.*, p.name as product_name, c.name as customer_name
+                FROM orders o
+                JOIN products p ON o.product_id = p.product_id
+                JOIN customers c ON o.customer_id = c.customer_id
+                WHERE o.order_id = %s
+            """
+            
+            cursor.execute(final_query, [order_id])
+            return cursor.fetchall()
+            
+        except Exception as e:
+            logger.error(f"Order creation transaction failed: {e}")
+            raise
+    
+    def _cancel_order_with_inventory(self, cursor, order_data):
+        """Cancel order and rollback inventory within transaction."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # 1. Update order status to cancelled
+            order_update = """
+                UPDATE orders 
+                SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP()
+                WHERE order_id = %s
+            """
+            
+            cursor.execute(order_update, [order_data["order_id"]])
+            logger.info(f"Cancelled order {order_data['order_id']}")
+            
+            # 2. Rollback inventory (increase stock back)
+            inventory_rollback = """
+                UPDATE inventory_forecast 
+                SET current_stock = current_stock + %s,
+                    last_updated = CURRENT_TIMESTAMP()
+                WHERE product_id = %s AND store_id = %s
+            """
+            
+            cursor.execute(inventory_rollback, [
+                order_data["quantity"],
+                order_data["product_id"],
+                order_data["store_id"]
+            ])
+            
+            # 3. Log inventory rollback
+            history_insert = """
+                INSERT INTO inventory_history (
+                    product_id, store_id, quantity_change, transaction_type,
+                    reference_id, notes, balance_after, created_by
+                ) VALUES (
+                    %s, %s, %s, 'IN', %s, %s,
+                    (SELECT current_stock FROM inventory_forecast 
+                     WHERE product_id = %s AND store_id = %s),
+                    'system'
+                )
+            """
+            
+            cursor.execute(history_insert, [
+                order_data["product_id"],
+                order_data["store_id"],
+                order_data["quantity"],  # Positive for incoming
+                order_data["order_number"],
+                f"Order cancelled: {order_data['order_number']}",
+                order_data["product_id"],
+                order_data["store_id"]
+            ])
+            
+            logger.info(f"Rolled back inventory for order {order_data['order_number']}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Order cancellation transaction failed: {e}")
+            raise
+    
     def close(self):
         """Close all connections in the pool."""
         if hasattr(self, 'connection_pool'):
