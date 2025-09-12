@@ -44,7 +44,7 @@ export class OrdersService {
     }
     /**
      * Create Order
-     * Create a new order.
+     * Create a new order with inventory transaction.
      * @param requestBody
      * @returns Order Successful Response
      * @throws ApiError
@@ -122,7 +122,7 @@ export class OrdersService {
     }
     /**
      * Delete Order
-     * Delete an order (soft delete by setting status to cancelled).
+     * Cancel an order with inventory rollback.
      * @param orderId
      * @returns any Successful Response
      * @throws ApiError
