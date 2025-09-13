@@ -35,7 +35,7 @@ class DatabricksAppClient:
       profile = os.getenv('DATABRICKS_CONFIG_PROFILE')
       host = os.getenv('DATABRICKS_HOST')
 
-      cmd = ['uvx', 'databricks', 'auth', 'token']
+      cmd = ['uvx', '--from', 'databricks-cli', 'databricks', 'auth', 'token']
 
       if profile:
         cmd.extend(['--profile', profile])
@@ -64,7 +64,7 @@ class DatabricksAppClient:
 
       # If no valid token, try to login
       print('No valid token found, attempting to login...')
-      login_cmd = ['uvx', 'databricks', 'auth', 'login']
+      login_cmd = ['uvx', '--from', 'databricks-cli', 'databricks', 'auth', 'login']
       if profile:
         login_cmd.extend(['--profile', profile])
       elif host:

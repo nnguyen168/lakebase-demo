@@ -99,6 +99,17 @@ class LakebasePostgresConnection:
     def create_tables(self):
         """Create all required tables for the inventory management system."""
         
+        # First, try to create a schema for the user if it doesn't exist
+        try:
+            self.execute_update("CREATE SCHEMA IF NOT EXISTS lakebase_demo")
+            logger.info("Created/verified schema lakebase_demo")
+            
+            # Set search path to use the new schema by default
+            self.execute_update("SET search_path TO lakebase_demo, public")
+            logger.info("Set search path to lakebase_demo schema")
+        except Exception as e:
+            logger.warning(f"Could not create dedicated schema, using public: {e}")
+        
         tables = {
             "customers": """
                 CREATE TABLE IF NOT EXISTS customers (

@@ -93,21 +93,44 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
 
   const fetchDropdownData = async () => {
     try {
-      // For now, we'll use mock data since the API endpoints might not exist yet
-      // In a real implementation, you would fetch from /api/products and /api/customers
-      setProducts([
-        { product_id: 1, name: 'Wireless Bluetooth Headphones', sku: 'WBH-001', price: 79.99, unit: 'unit' },
-        { product_id: 2, name: 'USB-C Charging Cable', sku: 'USB-002', price: 19.99, unit: 'unit' },
-        { product_id: 3, name: 'Smartphone Case', sku: 'SC-003', price: 24.99, unit: 'unit' },
-      ]);
+      // Fetch products from PostgreSQL database
+      const productsResponse = await fetch('/debug/products');
+      if (productsResponse.ok) {
+        const productsData = await productsResponse.json();
+        if (productsData.status === 'success') {
+          setProducts(productsData.products);
+        } else {
+          throw new Error('Failed to load products from database');
+        }
+      } else {
+        throw new Error('Failed to fetch products');
+      }
       
-      setCustomers([
-        { customer_id: 1, name: 'Electronics Plus', email: 'orders@electronicsplus.com' },
-        { customer_id: 2, name: 'TechMart Inc', email: 'purchasing@techmart.com' },
-        { customer_id: 3, name: 'Digital Solutions', email: 'orders@digitalsol.com' },
-      ]);
+      // Fetch customers from PostgreSQL database
+      const customersResponse = await fetch('/debug/customers');
+      if (customersResponse.ok) {
+        const customersData = await customersResponse.json();
+        if (customersData.status === 'success') {
+          setCustomers(customersData.customers);
+        } else {
+          // Fallback to mock customers if the endpoint doesn't exist yet
+          setCustomers([
+            { customer_id: 1, name: 'John Doe', email: 'john@example.com' },
+            { customer_id: 2, name: 'Jane Smith', email: 'jane@example.com' },
+            { customer_id: 3, name: 'Bob Johnson', email: 'bob@example.com' },
+          ]);
+        }
+      } else {
+        // Fallback to mock customers if the endpoint doesn't exist yet
+        setCustomers([
+          { customer_id: 1, name: 'John Doe', email: 'john@example.com' },
+          { customer_id: 2, name: 'Jane Smith', email: 'jane@example.com' },
+          { customer_id: 3, name: 'Bob Johnson', email: 'bob@example.com' },
+        ]);
+      }
     } catch (err) {
-      setError('Failed to load form data');
+      setError('Failed to load form data from database');
+      console.error('Error fetching dropdown data:', err);
     }
   };
 
