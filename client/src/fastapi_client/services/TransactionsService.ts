@@ -2,48 +2,17 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { ForecastStatus } from '../models/ForecastStatus';
-import type { InventoryForecast } from '../models/InventoryForecast';
-import type { InventoryForecastResponse } from '../models/InventoryForecastResponse';
-import type { InventoryForecastUpdate } from '../models/InventoryForecastUpdate';
 import type { InventoryTransaction } from '../models/InventoryTransaction';
 import type { InventoryTransactionCreate } from '../models/InventoryTransactionCreate';
 import type { InventoryTransactionUpdate } from '../models/InventoryTransactionUpdate';
-import type { StockManagementAlertKPI } from '../models/StockManagementAlertKPI';
 import type { TransactionManagementKPI } from '../models/TransactionManagementKPI';
 import type { TransactionResponse } from '../models/TransactionResponse';
 import type { TransactionStatus } from '../models/TransactionStatus';
 import type { TransactionType } from '../models/TransactionType';
-import type { UserInfo } from '../models/UserInfo';
-import type { UserWorkspaceInfo } from '../models/UserWorkspaceInfo';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
-export class ApiService {
-    /**
-     * Get Current User
-     * Get current user information from Databricks.
-     * @returns UserInfo Successful Response
-     * @throws ApiError
-     */
-    public static getCurrentUserApiUserMeGet(): CancelablePromise<UserInfo> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/user/me',
-        });
-    }
-    /**
-     * Get User Workspace Info
-     * Get user information along with workspace details.
-     * @returns UserWorkspaceInfo Successful Response
-     * @throws ApiError
-     */
-    public static getUserWorkspaceInfoApiUserMeWorkspaceGet(): CancelablePromise<UserWorkspaceInfo> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/user/me/workspace',
-        });
-    }
+export class TransactionsService {
     /**
      * Get Transactions
      * Get list of inventory transactions with optional filters.
@@ -171,73 +140,6 @@ export class ApiService {
             path: {
                 'transaction_id': transactionId,
             },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Get Inventory Forecast
-     * Get inventory forecast with optional filters.
-     * @param warehouseId Filter by warehouse ID
-     * @param status Filter by forecast status
-     * @param limit Maximum number of items to return
-     * @param offset Number of items to skip
-     * @returns InventoryForecastResponse Successful Response
-     * @throws ApiError
-     */
-    public static getInventoryForecastApiInventoryForecastGet(
-        warehouseId?: (number | null),
-        status?: (ForecastStatus | null),
-        limit: number = 100,
-        offset?: number,
-    ): CancelablePromise<Array<InventoryForecastResponse>> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/inventory/forecast',
-            query: {
-                'warehouse_id': warehouseId,
-                'status': status,
-                'limit': limit,
-                'offset': offset,
-            },
-            errors: {
-                422: `Validation Error`,
-            },
-        });
-    }
-    /**
-     * Get Stock Alerts Kpi
-     * Get KPI metrics for stock management alerts.
-     * @returns StockManagementAlertKPI Successful Response
-     * @throws ApiError
-     */
-    public static getStockAlertsKpiApiInventoryAlertsKpiGet(): CancelablePromise<StockManagementAlertKPI> {
-        return __request(OpenAPI, {
-            method: 'GET',
-            url: '/api/inventory/alerts/kpi',
-        });
-    }
-    /**
-     * Update Inventory Forecast
-     * Update inventory forecast for a specific item.
-     * @param forecastId
-     * @param requestBody
-     * @returns InventoryForecast Successful Response
-     * @throws ApiError
-     */
-    public static updateInventoryForecastApiInventoryForecastForecastIdPut(
-        forecastId: number,
-        requestBody: InventoryForecastUpdate,
-    ): CancelablePromise<InventoryForecast> {
-        return __request(OpenAPI, {
-            method: 'PUT',
-            url: '/api/inventory/forecast/{forecast_id}',
-            path: {
-                'forecast_id': forecastId,
-            },
-            body: requestBody,
-            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

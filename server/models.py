@@ -1,56 +1,54 @@
-"""Database models for Lakebase inventory management system."""
+"""Database models for inventory management system."""
 
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Optional
+from decimal import Decimal
+from pydantic import BaseModel
 from enum import Enum
 
 
-class OrderStatus(str, Enum):
-    """Order status enumeration."""
+class TransactionStatus(str, Enum):
+    """Transaction status enumeration."""
     PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
+    CONFIRMED = "confirmed"
+    PROCESSING = "processing"
     SHIPPED = "shipped"
     DELIVERED = "delivered"
     CANCELLED = "cancelled"
 
 
+class TransactionType(str, Enum):
+    """Transaction type enumeration."""
+    INBOUND = "inbound"
+    SALE = "sale"
+    ADJUSTMENT = "adjustment"
+
+
+class ForecastStatus(str, Enum):
+    """Forecast status enumeration."""
+    ACTIVE = "active"
+    PENDING = "pending"
+    EXPIRED = "expired"
+
+
 class InventoryStatus(str, Enum):
-    """Inventory status enumeration."""
+    """Inventory status for UI display."""
     IN_STOCK = "in_stock"
     LOW_STOCK = "low_stock"
     OUT_OF_STOCK = "out_of_stock"
     REORDER_NEEDED = "reorder_needed"
 
 
-# Base Models
-class CustomerBase(BaseModel):
-    """Base customer model."""
-    name: str
-    email: str
-    phone: Optional[str] = None
-    address: Optional[str] = None
-
-
-class Customer(CustomerBase):
-    """Customer model with ID."""
-    customer_id: int
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
+# Product Models
 class ProductBase(BaseModel):
     """Base product model."""
     name: str
     description: Optional[str] = None
     sku: str
-    price: float
-    unit: str = "unit"
+    price: Decimal
+    unit: str = "piece"
     category: Optional[str] = None
+    reorder_level: int = 10
 
 
 class Product(ProductBase):
@@ -63,87 +61,125 @@ class Product(ProductBase):
         from_attributes = True
 
 
-class OrderBase(BaseModel):
-    """Base order model."""
-    product_id: int
-    customer_id: int
-    store_id: str
-    quantity: int
-    requested_by: str
-    status: OrderStatus = OrderStatus.PENDING
-    notes: Optional[str] = None
-
-
-class Order(OrderBase):
-    """Order model with ID and timestamps."""
-    order_id: int
-    order_number: str
-    order_date: datetime
-    updated_at: datetime
-    
-    # Joined fields for display
-    product_name: Optional[str] = None
-    customer_name: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
-
-class OrderCreate(OrderBase):
-    """Model for creating a new order."""
+class ProductCreate(ProductBase):
+    """Model for creating a new product."""
     pass
 
 
-class OrderUpdate(BaseModel):
-    """Model for updating an order."""
-    status: Optional[OrderStatus] = None
-    quantity: Optional[int] = None
-    notes: Optional[str] = None
+class ProductUpdate(BaseModel):
+    """Model for updating a product."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[Decimal] = None
+    unit: Optional[str] = None
+    category: Optional[str] = None
+    reorder_level: Optional[int] = None
 
 
-class InventoryHistoryBase(BaseModel):
-    """Base inventory history model."""
-    product_id: int
-    store_id: str
-    quantity_change: int
-    transaction_type: str  # "IN", "OUT", "ADJUSTMENT"
-    reference_id: Optional[str] = None
-    notes: Optional[str] = None
+# Warehouse Models
+class WarehouseBase(BaseModel):
+    """Base warehouse model."""
+    name: str
+    location: Optional[str] = None
+    manager_id: Optional[int] = None
+    timezone: str = "utc"
 
 
-class InventoryHistory(InventoryHistoryBase):
-    """Inventory history model with ID."""
-    history_id: int
-    transaction_date: datetime
-    balance_after: int
-    created_by: str
+class Warehouse(WarehouseBase):
+    """Warehouse model with ID."""
+    warehouse_id: int
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         from_attributes = True
 
 
+class WarehouseCreate(WarehouseBase):
+    """Model for creating a new warehouse."""
+    pass
+
+
+# Inventory Transaction Models (replacing Order)
+class InventoryTransactionBase(BaseModel):
+    """Base inventory transaction model."""
+    product_id: int
+    warehouse_id: int
+    quantity_change: int
+    transaction_type: TransactionType
+    status: TransactionStatus = TransactionStatus.PENDING
+    notes: Optional[str] = None
+
+
+class InventoryTransaction(InventoryTransactionBase):
+    """Inventory transaction model with ID."""
+    transaction_id: int
+    transaction_number: str
+    transaction_timestamp: datetime
+    updated_at: datetime
+
+    # Joined fields for display
+    product_name: Optional[str] = None
+    warehouse_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class InventoryTransactionCreate(BaseModel):
+    """Model for creating a new transaction."""
+    product_id: int
+    warehouse_id: int
+    quantity_change: int
+    transaction_type: TransactionType
+    notes: Optional[str] = None
+
+
+class InventoryTransactionUpdate(BaseModel):
+    """Model for updating a transaction."""
+    status: Optional[TransactionStatus] = None
+    quantity_change: Optional[int] = None
+    notes: Optional[str] = None
+
+
+
+
+# Inventory Forecast Models
 class InventoryForecastBase(BaseModel):
     """Base inventory forecast model."""
     product_id: int
-    store_id: str
-    current_stock: int
-    forecast_30_days: int
-    reorder_point: int
-    reorder_quantity: int
-    status: InventoryStatus
+    warehouse_id: int
+    current_stock: Optional[int] = None
+    forecast_30_days: Optional[int] = None
+    reorder_point: Optional[int] = None
+    reorder_quantity: Optional[int] = None
+    confidence_score: Optional[Decimal] = None
+    status: ForecastStatus = ForecastStatus.ACTIVE
 
 
 class InventoryForecast(InventoryForecastBase):
     """Inventory forecast model with metadata."""
     forecast_id: int
     last_updated: datetime
-    
+
     # Joined fields for display
     product_name: Optional[str] = None
     product_sku: Optional[str] = None
+    warehouse_name: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class InventoryForecastCreate(BaseModel):
+    """Model for creating inventory forecast."""
+    product_id: int
+    warehouse_id: int
+    current_stock: int
+    forecast_30_days: int
+    reorder_point: int
+    reorder_quantity: int
+    confidence_score: Optional[Decimal] = None
 
 
 class InventoryForecastUpdate(BaseModel):
@@ -152,21 +188,24 @@ class InventoryForecastUpdate(BaseModel):
     forecast_30_days: Optional[int] = None
     reorder_point: Optional[int] = None
     reorder_quantity: Optional[int] = None
-    status: Optional[InventoryStatus] = None
+    confidence_score: Optional[Decimal] = None
+    status: Optional[ForecastStatus] = None
+
+
 
 
 # Response Models for API
-class OrderResponse(BaseModel):
-    """Response model for order with product details."""
-    order_id: int
-    order_number: str
+class TransactionResponse(BaseModel):
+    """Response model for transaction with details."""
+    transaction_id: int
+    transaction_number: str
     product: str
-    quantity: int
-    store: str
-    requested_by: str
-    order_date: datetime
-    status: OrderStatus
-    
+    quantity_change: int
+    warehouse: str
+    transaction_type: str
+    transaction_timestamp: datetime
+    status: TransactionStatus
+
     class Config:
         from_attributes = True
 
@@ -179,19 +218,21 @@ class InventoryForecastResponse(BaseModel):
     forecast_30_days: int
     status: InventoryStatus
     action: str
-    
+
     class Config:
         from_attributes = True
 
 
 # KPI Models
-class OrderManagementKPI(BaseModel):
-    """KPI data for order management."""
-    total_orders: int
-    pending_orders: int
-    approved_orders: int
-    shipped_orders: int
-    average_order_value: float
+class TransactionManagementKPI(BaseModel):
+    """KPI data for transaction management."""
+    total_transactions: int
+    pending_transactions: int
+    confirmed_transactions: int
+    processing_transactions: int
+    shipped_transactions: int
+    delivered_transactions: int
+    total_quantity_change: int
 
 
 class StockManagementAlertKPI(BaseModel):

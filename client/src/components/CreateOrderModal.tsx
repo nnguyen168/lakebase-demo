@@ -28,18 +28,31 @@ interface Product {
   sku: string;
   price: number;
   unit: string;
+  category?: string;
+  expiration_days?: number;
+  storage_temp?: string;
+  allergens?: string;
+  organic?: boolean;
 }
 
 interface Customer {
   customer_id: number;
   name: string;
   email: string;
+  customer_type?: string;
+}
+
+interface Store {
+  store_id: number;
+  name: string;
+  location?: string;
+  type: string;
 }
 
 interface CreateOrderFormData {
   product_id: number | null;
   customer_id: number | null;
-  store_id: string;
+  store_id: number | null;
   quantity: number;
   requested_by: string;
   notes: string;
@@ -67,6 +80,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
   
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -82,7 +96,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
     setFormData({
       product_id: null,
       customer_id: null,
-      store_id: '',
+      store_id: null,
       quantity: 1,
       requested_by: '',
       notes: '',
@@ -105,7 +119,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
       } else {
         throw new Error('Failed to fetch products');
       }
-      
+
       // Fetch customers from PostgreSQL database
       const customersResponse = await fetch('/debug/customers');
       if (customersResponse.ok) {
@@ -113,21 +127,30 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
         if (customersData.status === 'success') {
           setCustomers(customersData.customers);
         } else {
-          // Fallback to mock customers if the endpoint doesn't exist yet
+          // Fallback to enhanced mock customers
           setCustomers([
-            { customer_id: 1, name: 'John Doe', email: 'john@example.com' },
-            { customer_id: 2, name: 'Jane Smith', email: 'jane@example.com' },
-            { customer_id: 3, name: 'Bob Johnson', email: 'bob@example.com' },
+            { customer_id: 1, name: 'Pacific Northwest Hotels', email: 'orders@pnwhotels.com', customer_type: 'hotel' },
+            { customer_id: 2, name: 'Elite Catering Services', email: 'purchasing@elitecatering.com', customer_type: 'catering' },
+            { customer_id: 3, name: 'Sunshine Restaurant Group', email: 'supply@sunshinerestaurants.com', customer_type: 'restaurant' },
           ]);
         }
       } else {
-        // Fallback to mock customers if the endpoint doesn't exist yet
+        // Fallback to enhanced mock customers
         setCustomers([
-          { customer_id: 1, name: 'John Doe', email: 'john@example.com' },
-          { customer_id: 2, name: 'Jane Smith', email: 'jane@example.com' },
-          { customer_id: 3, name: 'Bob Johnson', email: 'bob@example.com' },
+          { customer_id: 1, name: 'Pacific Northwest Hotels', email: 'orders@pnwhotels.com', customer_type: 'hotel' },
+          { customer_id: 2, name: 'Elite Catering Services', email: 'purchasing@elitecatering.com', customer_type: 'catering' },
+          { customer_id: 3, name: 'Sunshine Restaurant Group', email: 'supply@sunshinerestaurants.com', customer_type: 'restaurant' },
         ]);
       }
+
+      // Fetch stores - fallback to mock data
+      setStores([
+        { store_id: 1, name: 'Downtown Bistro', location: 'Portland, OR', type: 'restaurant' },
+        { store_id: 2, name: 'Central Food Warehouse', location: 'Portland, OR', type: 'warehouse' },
+        { store_id: 3, name: 'Morning Glory Cafe', location: 'Seattle, WA', type: 'cafe' },
+        { store_id: 4, name: 'Gourmet Express Food Truck', location: 'Mobile', type: 'food_truck' },
+        { store_id: 5, name: 'The Garden Restaurant', location: 'San Francisco, CA', type: 'restaurant' },
+      ]);
     } catch (err) {
       setError('Failed to load form data from database');
       console.error('Error fetching dropdown data:', err);
@@ -145,8 +168,8 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
       errors.customer_id = 'Customer is required';
     }
     
-    if (!formData.store_id.trim()) {
-      errors.store_id = 'Store ID is required';
+    if (!formData.store_id) {
+      errors.store_id = 'Store is required';
     }
     
     if (!formData.quantity || formData.quantity < 1) {
@@ -208,9 +231,9 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Create New Order</DialogTitle>
+          <DialogTitle>Create New Food & Beverage Order</DialogTitle>
           <DialogDescription>
-            Fill in the details to create a new order.
+            Place an order for fresh ingredients, beverages, and specialty food items.
           </DialogDescription>
         </DialogHeader>
         
@@ -235,9 +258,20 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
               <SelectContent>
                 {products.map((product) => (
                   <SelectItem key={product.product_id} value={product.product_id.toString()}>
-                    <div className="flex items-center justify-between w-full">
-                      <span>{product.name}</span>
-                      <Badge variant="outline" className="ml-2">${product.price}</Badge>
+                    <div className="flex flex-col space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{product.name}</span>
+                        <Badge variant="outline">${product.price}/{product.unit}</Badge>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                        <span>SKU: {product.sku}</span>
+                        {product.category && (
+                          <Badge variant="secondary" className="text-xs">{product.category}</Badge>
+                        )}
+                        {product.organic && (
+                          <Badge variant="outline" className="text-xs bg-green-50">Organic</Badge>
+                        )}
+                      </div>
                     </div>
                   </SelectItem>
                 ))}
@@ -247,9 +281,21 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
               <p className="text-sm text-red-500">{validationErrors.product_id}</p>
             )}
             {selectedProduct && (
-              <p className="text-sm text-muted-foreground">
-                SKU: {selectedProduct.sku} | ${selectedProduct.price}/{selectedProduct.unit}
-              </p>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>SKU: {selectedProduct.sku} | ${selectedProduct.price}/{selectedProduct.unit}</p>
+                {selectedProduct.category && (
+                  <p>Category: {selectedProduct.category}</p>
+                )}
+                {selectedProduct.storage_temp && (
+                  <p>Storage: {selectedProduct.storage_temp}</p>
+                )}
+                {selectedProduct.expiration_days && (
+                  <p className="text-orange-600">Shelf life: {selectedProduct.expiration_days} days</p>
+                )}
+                {selectedProduct.allergens && (
+                  <p className="text-red-600">⚠️ Contains: {selectedProduct.allergens}</p>
+                )}
+              </div>
             )}
           </div>
 
@@ -267,7 +313,14 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                 {customers.map((customer) => (
                   <SelectItem key={customer.customer_id} value={customer.customer_id.toString()}>
                     <div>
-                      <div className="font-medium">{customer.name}</div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">{customer.name}</span>
+                        {customer.customer_type && (
+                          <Badge variant="outline" className="text-xs">
+                            {customer.customer_type}
+                          </Badge>
+                        )}
+                      </div>
                       <div className="text-sm text-muted-foreground">{customer.email}</div>
                     </div>
                   </SelectItem>
@@ -279,16 +332,34 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             )}
           </div>
 
-          {/* Store ID */}
+          {/* Store Selection */}
           <div className="space-y-2">
-            <Label htmlFor="store_id">Store ID *</Label>
-            <Input
-              id="store_id"
-              value={formData.store_id}
-              onChange={(e) => setFormData({ ...formData, store_id: e.target.value })}
-              placeholder="e.g. STORE-001"
-              className={validationErrors.store_id ? 'border-red-500' : ''}
-            />
+            <Label htmlFor="store">Store *</Label>
+            <Select
+              value={formData.store_id?.toString() || ''}
+              onValueChange={(value) => setFormData({ ...formData, store_id: parseInt(value) })}
+            >
+              <SelectTrigger className={validationErrors.store_id ? 'border-red-500' : ''}>
+                <SelectValue placeholder="Select a store" />
+              </SelectTrigger>
+              <SelectContent>
+                {stores.map((store) => (
+                  <SelectItem key={store.store_id} value={store.store_id.toString()}>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium">{store.name}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {store.type}
+                        </Badge>
+                      </div>
+                      {store.location && (
+                        <div className="text-sm text-muted-foreground">{store.location}</div>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {validationErrors.store_id && (
               <p className="text-sm text-red-500">{validationErrors.store_id}</p>
             )}

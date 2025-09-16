@@ -19,10 +19,20 @@ export type OpenAPIConfig = {
     ENCODE_PATH?: ((path: string) => string) | undefined;
 };
 
+// Determine the base URL based on the environment
+const getBaseUrl = () => {
+    // In production (Databricks Apps), use relative URLs
+    if (window.location.hostname.includes('databricksapps.com')) {
+        return '';
+    }
+    // In local development, use the backend server URL
+    return 'http://localhost:8000';
+};
+
 export const OpenAPI: OpenAPIConfig = {
-    BASE: '',
-    VERSION: '0.1.0',
-    WITH_CREDENTIALS: false,
+    BASE: getBaseUrl(),
+    VERSION: '1.0.0',
+    WITH_CREDENTIALS: true,
     CREDENTIALS: 'include',
     TOKEN: undefined,
     USERNAME: undefined,

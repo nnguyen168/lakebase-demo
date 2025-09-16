@@ -1,11 +1,7 @@
-import OrderManagement from "./pages/OrderManagement";
+import SmartStockDashboard from "./pages/SmartStockDashboard";
 
 function App() {
-  return (
-    <div className="min-h-screen bg-background">
-      <OrderManagement />
-    </div>
-  );
+  return <SmartStockDashboard />;
 }
 
 export default App;

@@ -2,7 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
-import type { InventoryStatus } from './InventoryStatus';
+import type { ForecastStatus } from './ForecastStatus';
 /**
  * Model for updating inventory forecast.
  */
@@ -11,6 +11,7 @@ export type InventoryForecastUpdate = {
     forecast_30_days?: (number | null);
     reorder_point?: (number | null);
     reorder_quantity?: (number | null);
-    status?: (InventoryStatus | null);
+    confidence_score?: (number | string | null);
+    status?: (ForecastStatus | null);
 };
 

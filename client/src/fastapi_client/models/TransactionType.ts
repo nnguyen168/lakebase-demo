@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Order status enumeration.
+ * Transaction type enumeration.
  */
-export type OrderStatus = 'pending' | 'approved' | 'rejected' | 'shipped' | 'delivered' | 'cancelled';
+export type TransactionType = 'inbound' | 'sale' | 'adjustment';

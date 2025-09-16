@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Testing API Calls</h1>
+    <div id="results"></div>
+
+    <script>
+        async function testAPIs() {
+            const results = document.getElementById('results');
+
+            // Test 1: Direct fetch to /api/transactions/
+            try {
+                console.log('Testing direct fetch to /api/transactions/...');
+                const response = await fetch('/api/transactions/');
+                const data = await response.json();
+                results.innerHTML += `<p>Direct API call: ${data.length} transactions found</p>`;
+                console.log('Direct API response:', data);
+            } catch (error) {
+                results.innerHTML += `<p>Direct API call failed: ${error.message}</p>`;
+                console.error('Direct API error:', error);
+            }
+
+            // Test 2: Check if the issue is with relative URLs
+            try {
+                console.log('Testing with full URL...');
+                const fullUrl = window.location.origin + '/api/transactions/';
+                console.log('Full URL:', fullUrl);
+                const response = await fetch(fullUrl);
+                const data = await response.json();
+                results.innerHTML += `<p>Full URL API call: ${data.length} transactions found</p>`;
+            } catch (error) {
+                results.innerHTML += `<p>Full URL API call failed: ${error.message}</p>`;
+                console.error('Full URL error:', error);
+            }
+
+            // Test 3: Check OpenAPI config
+            results.innerHTML += `<p>Window location hostname: ${window.location.hostname}</p>`;
+            results.innerHTML += `<p>Includes databricksapps.com: ${window.location.hostname.includes('databricksapps.com')}</p>`;
+        }
+
+        // Run tests when page loads
+        testAPIs();
+    </script>
+</body>
+</html>

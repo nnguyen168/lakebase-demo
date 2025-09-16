@@ -36,9 +36,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-  title='Databricks App API',
-  description='Modern FastAPI application template for Databricks Apps with React frontend',
-  version='0.1.0',
+  title='SmartStock API',
+  description='Intelligent inventory management system for VulcanTech Manufacturing',
+  version='1.0.0',
   lifespan=lifespan,
 )
 
@@ -79,16 +79,76 @@ async def debug_env():
   """Debug endpoint to check environment variables."""
   return {
     'db_configured': bool(os.getenv('DB_HOST')),
-    'db_host_present': bool(os.getenv('DB_HOST')),
-    'db_user_present': bool(os.getenv('DB_USER')),
+    'db_host': os.getenv('DB_HOST', 'Not set')[:50],  # Truncate for security
+    'db_user': os.getenv('DB_USER', 'Not set'),
     'db_password_present': bool(os.getenv('DB_PASSWORD')),
     'db_name': os.getenv('DB_NAME', 'Not set'),
+    'db_port': os.getenv('DB_PORT', 'Not set'),
     'using_real_db': all([
       os.getenv('DB_HOST'),
       os.getenv('DB_USER'),
       os.getenv('DB_PASSWORD')
     ])
   }
+
+@app.get('/test-api')
+async def test_api():
+  """Serve test page for API debugging."""
+  from fastapi.responses import HTMLResponse
+  with open('test_frontend_api.html', 'r') as f:
+    content = f.read()
+  return HTMLResponse(content=content)
+
+@app.get('/debug/db-test')
+async def debug_db_test():
+  """Test database connection and query."""
+  import psycopg2
+  from psycopg2.extras import RealDictCursor
+
+  try:
+    # Get environment variables
+    db_config = {
+      "host": os.getenv("DB_HOST"),
+      "port": int(os.getenv("DB_PORT", 5432)),
+      "database": os.getenv("DB_NAME", "databricks_postgres"),
+      "user": os.getenv("DB_USER"),
+      "password": os.getenv("DB_PASSWORD"),
+      "sslmode": "require",
+    }
+
+    # Try to connect
+    conn = psycopg2.connect(**db_config, cursor_factory=RealDictCursor)
+    cursor = conn.cursor()
+
+    # Count transactions
+    cursor.execute("SELECT COUNT(*) as count FROM inventory_transactions")
+    transaction_count = cursor.fetchone()['count']
+
+    # Count products
+    cursor.execute("SELECT COUNT(*) as count FROM products")
+    product_count = cursor.fetchone()['count']
+
+    # Count warehouses
+    cursor.execute("SELECT COUNT(*) as count FROM warehouses")
+    warehouse_count = cursor.fetchone()['count']
+
+    cursor.close()
+    conn.close()
+
+    return {
+      'connection': 'success',
+      'transaction_count': transaction_count,
+      'product_count': product_count,
+      'warehouse_count': warehouse_count,
+      'db_host': db_config['host'][:30] if db_config['host'] else 'None'
+    }
+  except Exception as e:
+    return {
+      'connection': 'failed',
+      'error': str(e),
+      'db_host': os.getenv('DB_HOST', 'Not set')[:30] if os.getenv('DB_HOST') else 'None',
+      'db_user': os.getenv('DB_USER', 'Not set')
+    }
 
 
 # ============================================================================

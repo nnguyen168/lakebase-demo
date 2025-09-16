@@ -1,4 +1,4 @@
-"""Database selector - chooses between mock and real database based on environment."""
+"""Database selector - only uses real PostgreSQL database."""
 
 import os
 
@@ -9,15 +9,11 @@ use_real_db = all([
     os.getenv("DB_PASSWORD")
 ])
 
-if use_real_db:
-    try:
-        from .postgres_database import db
-        print("Using Lakebase PostgreSQL database")
-    except Exception as e:
-        print(f"Failed to connect to PostgreSQL, falling back to mock: {e}")
-        from .mock_database import db
-else:
-    from .mock_database import db
-    print("Using mock database (no DB credentials found)")
+if not use_real_db:
+    raise ValueError("PostgreSQL database credentials are required. Please set DB_HOST, DB_USER, and DB_PASSWORD environment variables.")
+
+# Only use real PostgreSQL database - no fallback
+from .postgres_database import db
+print("Using Lakebase PostgreSQL database")
 
 __all__ = ['db']

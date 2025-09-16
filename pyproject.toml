@@ -1,7 +1,7 @@
 [project]
-name = "databricks-app-template"
-version = "0.1.0"
-description = "Modern Databricks App Template - FastAPI backend with React TypeScript frontend"
+name = "smartstock"
+version = "1.0.0"
+description = "SmartStock - Intelligent inventory management for VulcanTech Manufacturing"
 authors = [
     {name = "Your Name", email = "your.email@databricks.com"},
 ]
