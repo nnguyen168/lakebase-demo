@@ -18,7 +18,7 @@ resources:
       tasks:
         - task_key: extract_data_to_delta
           notebook_task:
-            notebook_path: ../src/lakebase_setup/03 Inventory Data Extraction.py
+            notebook_path: ../src/etl/inventory_sales_history.ipynb
             base_parameters:
               <<: *task_parameters
         - task_key: update_dim_products
@@ -46,6 +46,6 @@ resources:
           depends_on:
             - task_key: extract_data_to_delta
           notebook_task:
-            notebook_path: ../src/forecasting_ml/03 Model Inference and Recommendations.py
+            notebook_path: ../src/forecasting_ml/03 Model Inference and Recommendations.ipynb
             base_parameters:
               <<: *task_parameters
