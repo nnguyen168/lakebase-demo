@@ -1,0 +1,51 @@
+common_task_parameters: &task_parameters
+  bundle_root: ${workspace.file_path}
+  env: ${bundle.target}
+  catalog: ${var.catalog_name}
+  schema_silver: ${resources.schemas.silver.name}
+  schema_gold: ${resources.schemas.gold.name}
+  schema_forecast: ${resources.schemas.forecast.name}
+  user: ${workspace.current_user.userName}
+  lakebase_instance_name: ${var.lakebase_instance_name}
+  ml_artifact_volume: ${resources.volumes.artifacts.name}
+
+resources:
+  jobs:
+    smart_stock_refresh_recommendations_job:
+      name: smart_stock_refresh_recommendations_job
+      max_concurrent_runs: 1
+      performance_target: PERFORMANCE_OPTIMIZED
+      tasks:
+        - task_key: extract_data_to_delta
+          notebook_task:
+            notebook_path: ../src/lakebase_setup/03 Inventory Data Extraction.py
+            base_parameters:
+              <<: *task_parameters
+        - task_key: update_dim_products
+          depends_on:
+            - task_key: extract_data_to_delta
+          notebook_task:
+            notebook_path: ../src/etl/dim_products.ipynb
+            base_parameters:
+              <<: *task_parameters
+        - task_key: update_dim_warehouses
+          depends_on:
+            - task_key: extract_data_to_delta
+          notebook_task:
+            notebook_path: ../src/etl/dim_warehouses.ipynb
+            base_parameters:
+              <<: *task_parameters
+        - task_key: update_fact_inventory_transactions
+          depends_on:
+            - task_key: extract_data_to_delta
+          notebook_task:
+            notebook_path: ../src/etl/fact_inventory_transactions.ipynb
+            base_parameters:
+              <<: *task_parameters
+        - task_key: generate_forecasts
+          depends_on:
+            - task_key: extract_data_to_delta
+          notebook_task:
+            notebook_path: ../src/forecasting_ml/03 Model Inference and Recommendations.py
+            base_parameters:
+              <<: *task_parameters

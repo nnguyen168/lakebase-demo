@@ -1,0 +1,75 @@
+common_task_parameters: &task_parameters
+  bundle_root: ${workspace.file_path}
+  env: ${bundle.target}
+  catalog: ${var.catalog_name}
+  schema_silver: ${resources.schemas.silver.name}
+  schema_gold: ${resources.schemas.gold.name}
+  schema_forecast: ${resources.schemas.forecast.name}
+  user: ${workspace.current_user.userName}
+  lakebase_instance_name: ${var.lakebase_instance_name}
+  ml_artifact_volume: ${resources.volumes.artifacts.name}
+
+resources:
+  jobs:
+    smart_stock_full_reset_job:
+      name: smart_stock_full_reset_job
+      max_concurrent_runs: 1
+      performance_target: PERFORMANCE_OPTIMIZED
+      permissions:
+        - level: CAN_MANAGE
+          group_name: smart_stock_group
+      tasks:
+        - task_key: create_lakebase_tables
+          notebook_task:
+            notebook_path: ../src/lakebase_setup/01 Create tables.py
+            base_parameters:
+              <<: *task_parameters
+        - task_key: insert_lakebase_data
+          depends_on:
+            - task_key: create_lakebase_tables
+          notebook_task:
+            notebook_path: ../src/lakebase_setup/02 Insert data.py
+            base_parameters:
+              <<: *task_parameters
+        - task_key: extract_data_to_delta
+          depends_on:
+            - task_key: insert_lakebase_data
+          notebook_task:
+            notebook_path: ../src/lakebase_setup/03 Inventory Data Extraction.py
+            base_parameters:
+              <<: *task_parameters
+        - task_key: update_dim_products
+          depends_on:
+            - task_key: extract_data_to_delta
+          notebook_task:
+            notebook_path: ../src/etl/dim_products.ipynb
+            base_parameters:
+              <<: *task_parameters
+        - task_key: update_dim_warehouses
+          depends_on:
+            - task_key: extract_data_to_delta
+          notebook_task:
+            notebook_path: ../src/etl/dim_warehouses.ipynb
+            base_parameters:
+              <<: *task_parameters
+        - task_key: update_fact_inventory_transactions
+          depends_on:
+            - task_key: extract_data_to_delta
+          notebook_task:
+            notebook_path: ../src/etl/fact_inventory_transactions.ipynb
+            base_parameters:
+              <<: *task_parameters
+        - task_key: train_models
+          depends_on:
+            - task_key: extract_data_to_delta
+          notebook_task:
+            notebook_path: ../src/forecasting_ml/02 Model Training.py
+            base_parameters:
+              <<: *task_parameters
+        - task_key: generate_forecasts
+          depends_on:
+            - task_key: train_models
+          notebook_task:
+            notebook_path: ../src/forecasting_ml/03 Model Inference and Recommendations.py
+            base_parameters:
+              <<: *task_parameters

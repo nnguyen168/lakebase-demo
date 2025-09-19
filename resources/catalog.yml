@@ -1,0 +1,17 @@
+resources:
+  schemas:
+    silver:
+      catalog_name: ${var.catalog_name}
+      name: silver
+    gold:
+      catalog_name: ${var.catalog_name}
+      name: gold
+    forecast:
+      catalog_name: ${var.catalog_name}
+      name: forecast
+
+  volumes:
+    artifacts:
+      catalog_name: ${resources.schemas.forecast.catalog_name}
+      schema_name: ${resources.schemas.forecast.name}
+      name: artifacts 
