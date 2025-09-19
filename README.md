@@ -84,6 +84,14 @@ databricks workspace list
 ```
 
 ### 2. Deploy Bundle to Databricks
+
+1. Create a catalog in Unity Catalog
+2. Create a Lakebase instance (1 CU should be sufficient)
+3. Modify variables in `databricks.yml` to:
+   1. set `catalog_name` and `lakebase_instance_name`.
+   2. set the URL of your workspace (`workspace.host_name`)
+4. Deploy the bundle
+
 ```bash
 # Review bundle configuration
 cat databricks.yml
@@ -99,7 +107,7 @@ databricks bundle status
 
 Run from Databricks Jobs UI.
 
-### 4. Create and Deploy Databricks App
+### 4. Deploy Databricks App
 ```bash
 # Navigate to app directory
 cd app/smart_stock

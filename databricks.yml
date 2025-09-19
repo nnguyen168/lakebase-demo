@@ -13,9 +13,6 @@ variables:
   lakebase_instance_name:
     description: The name of the Lakebase instance to use for the Smart Stock application.
     default: smart-stock-db
-  app_name:
-    description: The name of the Smart Stock application.
-    default: smart_stock
 
 
 targets:
@@ -26,7 +23,6 @@ targets:
     default: true
     variables:
       catalog_name: smart_stock
-      app_name: smart_stock_dev
     workspace:
       host: https://dbc-ea2c343f-6f56.cloud.databricks.com/
     permissions:
@@ -37,7 +33,6 @@ targets:
     mode: production
     variables:
       catalog_name: smart_stock
-      app_name: smart_stock
     workspace:
       host: https://dbc-ea2c343f-6f56.cloud.databricks.com/
       root_path: /Shared/smart_stock
