@@ -73,3 +73,10 @@ resources:
             notebook_path: ../src/forecasting_ml/03 Model Inference and Recommendations.ipynb
             base_parameters:
               <<: *task_parameters
+        - task_key: write_back_recommendations
+          depends_on:
+            - task_key: generate_forecasts
+          notebook_task:
+            notebook_path: ../src/etl/write_back_recommendations.ipynb
+            base_parameters:
+              <<: *task_parameters
