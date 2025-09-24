@@ -65,7 +65,7 @@ class TransactionGenerator:
         # Transaction types and their characteristics
         self.transaction_types = {
             "inbound": {
-                "frequency": 0.05,  # 5% of transactions (further reduced for better balance)
+                "frequency": 0.20,  # 20% of transactions (further reduced for better balance)
                 "quantity_range": (10, 150),  # Reduced quantity range for better balance
                 "status_options": ["delivered", "shipped", "processing", "confirmed", "pending"],
                 "status_weights": [0.70, 0.15, 0.10, 0.03, 0.02],
@@ -81,7 +81,7 @@ class TransactionGenerator:
                 ]
             },
             "sale": {
-                "frequency": 0.85,  # 85% of transactions (increased to compensate for reduced inbound)
+                "frequency": 0.75,  # 75% of transactions (increased to compensate for reduced inbound)
                 "quantity_range": (1, 25),  # Reduced max quantity for smoother sales
                 "status_options": ["delivered", "processing", "confirmed", "pending"],
                 "status_weights": [0.85, 0.10, 0.03, 0.02],
@@ -110,7 +110,7 @@ class TransactionGenerator:
                 ]
             },
             "adjustment": {
-                "frequency": 0.10,  # 10% of transactions (unchanged)
+                "frequency": 0.05,  # 5% of transactions (unchanged)
                 "quantity_range": (-10, 10),
                 "status_options": ["delivered", "confirmed"],
                 "status_weights": [0.95, 0.05],
@@ -375,21 +375,26 @@ class TransactionGenerator:
         
         date_str = date.strftime("%y%m%d")  # Use 2-digit year to save space
         # Use first 6 chars of uuid4 for uniqueness, plus sequence for rare collisions
-        suffix = uuid.uuid4().hex[:6].upper()
+        '''suffix = uuid.uuid4().hex[:6].upper()
         if sequence > 0:
             suffix += chr(ord('A') + sequence)
+        '''
+        import string
+        chars = string.ascii_uppercase + string.digits
+        suffix = ''.join(random.choices(chars, k=5))
         
         # Ensure total length is under 50 characters
-        transaction_num = f"{type_prefix[transaction_type]}-{date_str}{suffix}"
+        transaction_num = f"{type_prefix[transaction_type]}-{date_str}-{suffix}"
         
         # If still too long, truncate the suffix
-        if len(transaction_num) > 50:
+        '''if len(transaction_num) > 50:
             max_suffix_len = 50 - len(f"{type_prefix[transaction_type]}-{date_str}")
             if max_suffix_len > 0:
                 suffix = suffix[:max_suffix_len]
                 transaction_num = f"{type_prefix[transaction_type]}-{date_str}{suffix}"
             else:
                 transaction_num = f"{type_prefix[transaction_type]}-{date_str}"
+        '''
         
         return transaction_num
     
