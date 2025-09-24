@@ -14,12 +14,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import {
   AlertTriangle, Package, TrendingUp, Clock, Truck,
-  CheckCircle, XCircle, Factory, ArrowUp, ArrowDown,
-  Activity, Package2
+  CheckCircle, Factory, ArrowUp, ArrowDown,
+  Activity
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client';
 import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse } from '@/fastapi_client';
 import { TransactionManagement } from '@/components/TransactionManagement';
+import ForecastModal from '@/components/ForecastModal';
 
 // Elena's KPIs
 interface ElenaKPIs {
@@ -55,6 +56,8 @@ const SmartStockDashboard: React.FC = () => {
   const [transactionKpi, setTransactionKpi] = useState<TransactionManagementKPI | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const [forecastModalOpen, setForecastModalOpen] = useState(false);
+  const [selectedForecastItem, setSelectedForecastItem] = useState<InventoryForecastResponse | null>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -180,6 +183,16 @@ const SmartStockDashboard: React.FC = () => {
   const getCriticalAlerts = () => {
     const criticalProducts = forecast.filter(f => f.status === 'out_of_stock' || f.status === 'reorder_needed');
     return criticalProducts.length;
+  };
+
+  const handleViewForecast = (item: InventoryForecastResponse) => {
+    setSelectedForecastItem(item);
+    setForecastModalOpen(true);
+  };
+
+  const closeForecastModal = () => {
+    setForecastModalOpen(false);
+    setSelectedForecastItem(null);
   };
 
   if (loading) {
@@ -511,6 +524,7 @@ const SmartStockDashboard: React.FC = () => {
                         <TableHead>30-Day Forecast</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Recommended Action</TableHead>
+                        <TableHead>View Forecast</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -540,6 +554,15 @@ const SmartStockDashboard: React.FC = () => {
                               {item.action}
                             </span>
                           </TableCell>
+                          <TableCell>
+                            <button
+                              onClick={() => handleViewForecast(item)}
+                              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors duration-200 flex items-center gap-1"
+                            >
+                              <Activity className="w-3 h-3" />
+                              View Chart
+                            </button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -550,6 +573,13 @@ const SmartStockDashboard: React.FC = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Forecast Modal */}
+      <ForecastModal
+        isOpen={forecastModalOpen}
+        onClose={closeForecastModal}
+        item={selectedForecastItem}
+      />
     </div>
   );
 };

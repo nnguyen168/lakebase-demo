@@ -20,18 +20,11 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { 
-  TrendingUp, TrendingDown, AlertTriangle, Package, 
-  BarChart3, X
+  AlertTriangle, Package, 
+  BarChart3, X, Target
 } from 'lucide-react';
 
-interface InventoryForecastData {
-  item_id: string;
-  item_name: string;
-  stock: number;
-  forecast_30_days: number;
-  status: string;
-  action: string;
-}
+import type { InventoryForecastResponse } from '@/fastapi_client';
 
 interface ForecastDataPoint {
   date: string;
@@ -43,7 +36,7 @@ interface ForecastDataPoint {
 interface ForecastModalProps {
   isOpen: boolean;
   onClose: () => void;
-  item: InventoryForecastData | null;
+  item: InventoryForecastResponse | null;
 }
 
 const ForecastModal: React.FC<ForecastModalProps> = ({ 
@@ -53,6 +46,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
 }) => {
   const [forecastData, setForecastData] = useState<ForecastDataPoint[]>([]);
   const [loading, setLoading] = useState(false);
+  const [todayDateString, setTodayDateString] = useState<string>('');
 
   useEffect(() => {
     if (isOpen && item) {
@@ -60,12 +54,13 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
     }
   }, [isOpen, item]);
 
-  const generateForecastData = (item: InventoryForecastData) => {
+  const generateForecastData = (item: InventoryForecastResponse) => {
     setLoading(true);
     
     // Generate 30 days past + today + 30 days future
     const data: ForecastDataPoint[] = [];
     const today = new Date();
+    const todayDateString = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     
     // Generate past 30 days + today (historical data)
     let pastStock = Math.round(item.stock * 1.3); // Start higher in the past
@@ -117,6 +112,7 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
     }
     
     setForecastData(data);
+    setTodayDateString(todayDateString);
     setLoading(false);
   };
 
@@ -267,10 +263,11 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
                     
                     {/* Today reference line */}
                     <ReferenceLine 
-                      x={30} 
+                      x={todayDateString} 
                       stroke="#ef4444" 
                       strokeDasharray="2 2"
-                      label={{ value: "Today", position: "topRight", fontSize: 12 }}
+                      strokeWidth={2}
+                      label={{ value: "Today", position: "top", fontSize: 12 }}
                     />
                   </LineChart>
                 </ResponsiveContainer>
