@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { apiClient } from '@/fastapi_client';
+import { apiClient } from '@/fastapi_client/client';
 import type { TransactionType } from '@/fastapi_client';
 
 interface TransactionManagementProps {

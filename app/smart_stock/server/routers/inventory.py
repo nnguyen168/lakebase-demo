@@ -24,17 +24,20 @@ async def get_inventory_forecast(
     try:
         query = """
             SELECT 
+                f.forecast_id,
                 p.sku as item_id,
                 p.name as item_name,
                 f.current_stock as stock,
                 f.forecast_30_days,
                 CASE
+                    WHEN f.status = 'resolved' THEN 'resolved'
                     WHEN f.current_stock = 0 THEN 'out_of_stock'
                     WHEN f.current_stock < f.reorder_point THEN 'reorder_needed'
                     WHEN f.current_stock < f.reorder_point * 1.5 THEN 'low_stock'
                     ELSE 'in_stock'
                 END as status,
                 CASE
+                    WHEN f.status = 'resolved' THEN 'Resolved'
                     WHEN f.current_stock = 0 THEN 'Urgent Reorder'
                     WHEN f.current_stock < f.reorder_point THEN 'Reorder Now'
                     WHEN f.current_stock < f.reorder_point * 1.5 THEN 'Monitor'

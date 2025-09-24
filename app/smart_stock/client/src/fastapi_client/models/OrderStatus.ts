@@ -3,6 +3,6 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Inventory status for UI display.
+ * Order status enumeration.
  */
-export type InventoryStatus = 'in_stock' | 'low_stock' | 'out_of_stock' | 'reorder_needed' | 'resolved';
+export type OrderStatus = 'pending' | 'approved' | 'ordered' | 'received' | 'cancelled';

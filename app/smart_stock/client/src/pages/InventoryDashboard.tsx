@@ -18,7 +18,7 @@ import {
   CheckCircle, XCircle, ShoppingCart, AlertCircle,
   Factory, Battery, Settings, Zap
 } from 'lucide-react';
-import { apiClient } from '@/fastapi_client';
+import { apiClient } from '@/fastapi_client/client';
 import { useUserInfo } from '@/hooks/useUserInfo';
 
 // Elena's KPIs

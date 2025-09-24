@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { apiClient } from '@/fastapi_client';
+import { apiClient } from '@/fastapi_client/client';
 import type { UserInfo } from '@/fastapi_client';
 
 interface UseUserInfoResult {

@@ -21,7 +21,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
-import { apiClient } from '@/fastapi_client';
+import { apiClient } from '@/fastapi_client/client';
 
 interface Product {
   product_id: number;
@@ -224,6 +224,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
           requested_by: formData.requested_by,
           status: 'pending',
           notes: formData.notes || null,
+          forecast_id: selectedItem?.forecast_id || null, // Include forecast_id if order is based on recommendation
         }),
       });
       

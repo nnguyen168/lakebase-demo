@@ -17,13 +17,14 @@ import {
   CheckCircle, Factory, ArrowUp, ArrowDown,
   Activity, ShoppingCart
 } from 'lucide-react';
-import { apiClient } from '@/fastapi_client';
+import { apiClient } from '@/fastapi_client/client';
 import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse } from '@/fastapi_client';
 import { TransactionManagement } from '@/components/TransactionManagement';
 import ForecastModal from '@/components/ForecastModal';
 import CreateOrderModal from '@/components/CreateOrderModal';
 import OrderSuccessModal from '@/components/OrderSuccessModal';
 import { useUserInfo } from '@/hooks/useUserInfo';
+import { getTransactionStatusStyle, getInventoryStatusStyle, formatStatusText } from '@/lib/status-utils';
 
 // Elena's KPIs
 interface ElenaKPIs {
@@ -166,18 +167,16 @@ const SmartStockDashboard: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, any> = {
-      'pending': 'secondary',
-      'confirmed': 'default',
-      'processing': 'secondary',
-      'shipped': 'default',
-      'delivered': 'default',
-      'cancelled': 'destructive'
-    };
+    const statusStyle = getTransactionStatusStyle(status);
+    const StatusIcon = statusStyle.icon;
 
     return (
-      <Badge variant={variants[status] || 'default'}>
-        {status}
+      <Badge 
+        variant={statusStyle.variant} 
+        className={`${statusStyle.className} flex items-center gap-1`}
+      >
+        <StatusIcon className="h-3 w-3" />
+        {formatStatusText(status)}
       </Badge>
     );
   };
@@ -570,21 +569,28 @@ const SmartStockDashboard: React.FC = () => {
                           <TableCell>{item.stock.toLocaleString()}</TableCell>
                           <TableCell>{item.forecast_30_days.toLocaleString()}</TableCell>
                           <TableCell>
-                            <Badge
-                              variant={
-                                item.status === 'out_of_stock' ? 'destructive' :
-                                item.status === 'low_stock' || item.status === 'reorder_needed' ? 'secondary' :
-                                'default'
-                              }
-                            >
-                              {item.status.replace('_', ' ')}
-                            </Badge>
+                            {(() => {
+                              const statusStyle = getInventoryStatusStyle(item.status);
+                              const StatusIcon = statusStyle.icon;
+                              return (
+                                <Badge 
+                                  variant={statusStyle.variant}
+                                  className={`${statusStyle.className} flex items-center gap-1 w-fit`}
+                                >
+                                  <StatusIcon className="h-3 w-3" />
+                                  {formatStatusText(item.status)}
+                                </Badge>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <span className={`font-medium ${
                               item.action === 'Urgent Reorder' ? 'text-red-600' :
                               item.action === 'Reorder Now' ? 'text-orange-600' :
-                              'text-gray-600'
+                              item.action === 'Monitor' ? 'text-amber-600' :
+                              item.action === 'Resolved' ? 'text-blue-600' :
+                              item.action === 'No Action' ? 'text-emerald-600' :
+                              'text-slate-600'
                             }`}>
                               {item.action}
                             </span>
@@ -601,12 +607,21 @@ const SmartStockDashboard: React.FC = () => {
                           <TableCell>
                             <button
                               onClick={() => handleCreateOrder(item)}
-                              className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition-colors duration-200 flex items-center gap-1"
-                              disabled={item.status === 'in_stock'}
-                              title={item.status === 'in_stock' ? 'Stock is sufficient' : 'Create reorder based on this recommendation'}
+                              className={`px-3 py-1 text-sm rounded-md transition-colors duration-200 flex items-center gap-1 ${
+                                item.status === 'in_stock' || item.status === 'resolved'
+                                  ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
+                              }`}
+                              disabled={item.status === 'in_stock' || item.status === 'resolved'}
+                              title={
+                                item.status === 'in_stock' ? 'Stock is sufficient' :
+                                item.status === 'resolved' ? 'Order already created for this recommendation' :
+                                'Create reorder based on this recommendation'
+                              }
                             >
                               <ShoppingCart className="w-3 h-3" />
-                              {item.status === 'in_stock' ? 'In Stock' : 'Reorder'}
+                              {item.status === 'in_stock' ? 'In Stock' : 
+                               item.status === 'resolved' ? 'Resolved' : 'Reorder'}
                             </button>
                           </TableCell>
                         </TableRow>

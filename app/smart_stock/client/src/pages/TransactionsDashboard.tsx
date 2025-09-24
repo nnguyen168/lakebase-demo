@@ -18,9 +18,10 @@ import {
   CheckCircle, ArrowUp, ArrowDown, Factory, Battery,
   Settings, Zap, Activity, BarChart3, Package2
 } from 'lucide-react';
-import { apiClient } from '@/fastapi_client';
+import { apiClient } from '@/fastapi_client/client';
 import { TransactionResponse, TransactionManagementKPI } from '@/fastapi_client';
 import { useUserInfo } from '@/hooks/useUserInfo';
+import { getTransactionStatusStyle, formatStatusText } from '@/lib/status-utils';
 
 const TransactionsDashboard: React.FC = () => {
   const { displayName, role } = useUserInfo();
@@ -91,27 +92,16 @@ const TransactionsDashboard: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, any> = {
-      'pending': 'secondary',
-      'confirmed': 'default',
-      'processing': 'secondary',
-      'shipped': 'default',
-      'delivered': 'default',
-      'cancelled': 'destructive'
-    };
-
-    const icons: Record<string, any> = {
-      'pending': <Clock className="w-3 h-3 mr-1" />,
-      'confirmed': <CheckCircle className="w-3 h-3 mr-1" />,
-      'processing': <Settings className="w-3 h-3 mr-1" />,
-      'shipped': <Truck className="w-3 h-3 mr-1" />,
-      'delivered': <Package className="w-3 h-3 mr-1" />
-    };
+    const statusStyle = getTransactionStatusStyle(status);
+    const StatusIcon = statusStyle.icon;
 
     return (
-      <Badge variant={variants[status] || 'default'} className="flex items-center">
-        {icons[status]}
-        {status}
+      <Badge 
+        variant={statusStyle.variant} 
+        className={`${statusStyle.className} flex items-center gap-1`}
+      >
+        <StatusIcon className="w-3 h-3" />
+        {formatStatusText(status)}
       </Badge>
     );
   };

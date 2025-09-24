@@ -5,4 +5,4 @@
 /**
  * Forecast status enumeration.
  */
-export type ForecastStatus = 'active' | 'pending' | 'expired';
+export type ForecastStatus = 'active' | 'pending' | 'expired' | 'resolved';

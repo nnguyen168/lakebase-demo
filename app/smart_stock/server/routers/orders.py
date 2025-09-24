@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime
 
 from ..models import (
-    Order, OrderCreate, OrderUpdate, OrderStatus
+    Order, OrderCreate, OrderUpdate, OrderStatus, ForecastStatus
 )
 # Use database selector
 from ..db_selector import db
@@ -50,6 +50,21 @@ async def create_order(order: OrderCreate):
         # Generate order number
         order_number = f"ORD-{datetime.now().strftime('%Y%m%d')}-{datetime.now().strftime('%H%M%S')}"
 
+        # If this order is based on a forecast recommendation, mark the forecast as resolved
+        if order.forecast_id:
+            try:
+                # Update the forecast status to resolved
+                update_query = """
+                    UPDATE inventory_forecast 
+                    SET status = %s, last_updated = CURRENT_TIMESTAMP
+                    WHERE forecast_id = %s
+                """
+                db.execute_update(update_query, (ForecastStatus.RESOLVED.value, order.forecast_id))
+                print(f"✅ Marked forecast {order.forecast_id} as resolved")
+            except Exception as forecast_error:
+                # Log the error but don't fail the order creation
+                print(f"⚠️ Warning: Could not update forecast {order.forecast_id}: {forecast_error}")
+
         # For now, just return a mock successful response without actually creating in database
         # In the future, this would insert into an orders table
         mock_order = Order(
@@ -60,6 +75,7 @@ async def create_order(order: OrderCreate):
             requested_by=order.requested_by,
             status=OrderStatus.PENDING,
             notes=order.notes,
+            forecast_id=order.forecast_id,
             created_at=datetime.now(),
             updated_at=datetime.now(),
             product_name="Mock Product",  # Would be joined from products table

@@ -19,10 +19,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
-  AlertCircle, Package, ShoppingCart, Plus, Edit, Trash2,
-  Clock, CheckCircle, Truck, Package2, XCircle, TrendingUp,
-  TrendingDown, AlertTriangle
+  AlertCircle, Package, ShoppingCart, Plus, Edit, TrendingUp
 } from 'lucide-react';
+import { getInventoryStatusStyle, getTransactionStatusStyle, formatStatusText } from '@/lib/status-utils';
 import CreateOrderModal from '@/components/CreateOrderModal';
 import OrderSuccessModal from '@/components/OrderSuccessModal';
 import EditOrderModal from '@/components/EditOrderModal';
@@ -40,6 +39,7 @@ interface OrderData {
 }
 
 interface InventoryForecastData {
+  forecast_id: number;
   item_id: string;
   item_name: string;
   stock: number;
@@ -119,81 +119,9 @@ const OrderManagement: React.FC = () => {
     }
   };
 
-  const getStatusBadgeStyles = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return {
-          variant: 'secondary' as const,
-          className: 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200',
-          icon: Clock
-        };
-      case 'approved':
-        return {
-          variant: 'secondary' as const,
-          className: 'bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-200',
-          icon: CheckCircle
-        };
-      case 'shipped':
-        return {
-          variant: 'secondary' as const,
-          className: 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200',
-          icon: Truck
-        };
-      case 'delivered':
-        return {
-          variant: 'secondary' as const,
-          className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200',
-          icon: Package2
-        };
-      case 'cancelled':
-        return {
-          variant: 'destructive' as const,
-          className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200',
-          icon: XCircle
-        };
-      default:
-        return {
-          variant: 'secondary' as const,
-          className: 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200',
-          icon: Package
-        };
-    }
-  };
+  // Using shared utility for consistent status styling
 
-  const getInventoryStatusBadgeStyles = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'in_stock':
-        return {
-          variant: 'secondary' as const,
-          className: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200',
-          icon: Package
-        };
-      case 'low_stock':
-        return {
-          variant: 'secondary' as const,
-          className: 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200',
-          icon: AlertTriangle
-        };
-      case 'out_of_stock':
-        return {
-          variant: 'destructive' as const,
-          className: 'bg-red-100 text-red-800 border-red-200 hover:bg-red-200',
-          icon: AlertTriangle
-        };
-      case 'reorder_needed':
-        return {
-          variant: 'secondary' as const,
-          className: 'bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-200',
-          icon: TrendingDown
-        };
-      default:
-        return {
-          variant: 'secondary' as const,
-          className: 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200',
-          icon: Package
-        };
-    }
-  };
+  // Using shared utility for inventory status styling
 
 
   const formatDate = (dateString: string) => {
@@ -251,7 +179,7 @@ const OrderManagement: React.FC = () => {
   };
 
   const renderStatusBadge = (status: string, showIcon: boolean = true, showTooltip: boolean = false) => {
-    const statusStyle = getStatusBadgeStyles(status);
+    const statusStyle = getTransactionStatusStyle(status);
     const StatusIcon = statusStyle.icon;
     
     const badge = (
@@ -260,7 +188,7 @@ const OrderManagement: React.FC = () => {
         className={`${statusStyle.className} ${showIcon ? 'flex items-center gap-1' : ''} w-fit cursor-default`}
       >
         {showIcon && <StatusIcon className="h-3 w-3" />}
-        {status}
+        {formatStatusText(status)}
       </Badge>
     );
 
@@ -491,7 +419,7 @@ const OrderManagement: React.FC = () => {
                       <TableCell>{item.forecast_30_days}</TableCell>
                       <TableCell>
                         {(() => {
-                          const statusStyle = getInventoryStatusBadgeStyles(item.status);
+                          const statusStyle = getInventoryStatusStyle(item.status);
                           const StatusIcon = statusStyle.icon;
                           return (
                             <Badge 
@@ -499,7 +427,7 @@ const OrderManagement: React.FC = () => {
                               className={`${statusStyle.className} flex items-center gap-1 w-fit`}
                             >
                               <StatusIcon className="h-3 w-3" />
-                              {item.status.replace('_', ' ')}
+                              {formatStatusText(item.status)}
                             </Badge>
                           );
                         })()}

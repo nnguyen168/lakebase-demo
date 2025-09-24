@@ -7,6 +7,7 @@ import type { InventoryStatus } from './InventoryStatus';
  * Response model for inventory forecast display.
  */
 export type InventoryForecastResponse = {
+    forecast_id: number;
     item_id: string;
     item_name: string;
     stock: number;

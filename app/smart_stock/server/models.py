@@ -29,6 +29,7 @@ class ForecastStatus(str, Enum):
     ACTIVE = "active"
     PENDING = "pending"
     EXPIRED = "expired"
+    RESOLVED = "resolved"
 
 
 class InventoryStatus(str, Enum):
@@ -37,6 +38,7 @@ class InventoryStatus(str, Enum):
     LOW_STOCK = "low_stock"
     OUT_OF_STOCK = "out_of_stock"
     REORDER_NEEDED = "reorder_needed"
+    RESOLVED = "resolved"
 
 
 # Product Models
@@ -212,6 +214,7 @@ class TransactionResponse(BaseModel):
 
 class InventoryForecastResponse(BaseModel):
     """Response model for inventory forecast display."""
+    forecast_id: int
     item_id: str
     item_name: str
     stock: int
@@ -240,6 +243,7 @@ class OrderBase(BaseModel):
     requested_by: str
     status: OrderStatus = OrderStatus.PENDING
     notes: Optional[str] = None
+    forecast_id: Optional[int] = None  # Link to forecast recommendation
 
 
 class Order(OrderBase):
@@ -264,6 +268,7 @@ class OrderCreate(BaseModel):
     quantity: int
     requested_by: str
     notes: Optional[str] = None
+    forecast_id: Optional[int] = None  # Link to forecast recommendation
 
 
 class OrderUpdate(BaseModel):
