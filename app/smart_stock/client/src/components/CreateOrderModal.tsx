@@ -27,9 +27,9 @@ interface Product {
   product_id: number;
   name: string;
   sku: string;
-  price: number;
-  unit: string;
-  category?: string;
+  price: string; // Changed to string to match FastAPI client
+  unit?: string; // Changed to optional to match FastAPI client
+  category?: string | null; // Allow null to match FastAPI client
   reorder_level?: number;
 }
 
@@ -40,10 +40,26 @@ interface CreateOrderFormData {
   notes: string;
 }
 
+interface OrderData {
+  order_id: number;
+  order_number: string;
+  product_id: number;
+  quantity: number;
+  requested_by: string;
+  status: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  product_name?: string;
+  product_sku?: string;
+  unit_price?: string;
+}
+
 interface CreateOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOrderCreated: () => void;
+  onOrderSuccess: (orderData: OrderData) => void; // New callback for successful order
   selectedItem?: any; // InventoryForecastResponse from dashboard
 }
 
@@ -51,6 +67,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
   isOpen, 
   onClose, 
   onOrderCreated,
+  onOrderSuccess,
   selectedItem
 }) => {
   const [formData, setFormData] = useState<CreateOrderFormData>({
@@ -215,8 +232,17 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
         throw new Error(errorData.detail || 'Failed to create order');
       }
       
-      onOrderCreated();
+      const orderData = await response.json();
+      
+      // Close this modal and show success modal
       onClose();
+      onOrderSuccess(orderData);
+      
+      // Reset form for next use
+      setTimeout(() => {
+        resetForm();
+      }, 100);
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create order');
     } finally {
@@ -255,6 +281,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             <Select
               value={formData.product_id?.toString() || ''}
               onValueChange={(value) => setFormData({ ...formData, product_id: parseInt(value) })}
+              disabled={loading}
             >
               <SelectTrigger className={`h-16 ${validationErrors.product_id ? 'border-red-500' : ''}`}>
                 <SelectValue placeholder="Select a product" />
@@ -265,7 +292,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                     <div className="flex flex-col space-y-2 w-full">
                       <div className="flex items-center justify-between w-full">
                         <span className="font-medium text-base">{product.name}</span>
-                        <Badge variant="outline" className="ml-2">${product.price}/{product.unit}</Badge>
+                        <Badge variant="outline" className="ml-2">${product.price}/{product.unit || 'unit'}</Badge>
                       </div>
                       <div className="flex items-center space-x-3 text-sm text-muted-foreground">
                         <span className="font-mono">SKU: {product.sku}</span>
@@ -283,12 +310,12 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             )}
             {selectedProduct && (
               <div className="text-sm text-muted-foreground space-y-1">
-                <p>SKU: {selectedProduct.sku} | ${selectedProduct.price}/{selectedProduct.unit}</p>
+                <p>SKU: {selectedProduct.sku} | ${selectedProduct.price}/{selectedProduct.unit || 'unit'}</p>
                 {selectedProduct.category && (
                   <p>Category: {selectedProduct.category}</p>
                 )}
                 {selectedProduct.reorder_level && (
-                  <p>Reorder Level: {selectedProduct.reorder_level} {selectedProduct.unit}</p>
+                  <p>Reorder Level: {selectedProduct.reorder_level} {selectedProduct.unit || 'unit'}</p>
                 )}
               </div>
             )}
@@ -305,13 +332,14 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
               value={formData.quantity}
               onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
               className={validationErrors.quantity ? 'border-red-500' : ''}
+              disabled={loading}
             />
             {validationErrors.quantity && (
               <p className="text-sm text-red-500">{validationErrors.quantity}</p>
             )}
             {selectedProduct && formData.quantity > 0 && (
               <p className="text-sm text-muted-foreground">
-                Total: ${(selectedProduct.price * formData.quantity).toFixed(2)}
+                Total: ${(parseFloat(selectedProduct.price) * formData.quantity).toFixed(2)}
               </p>
             )}
           </div>
@@ -325,6 +353,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
               onChange={(e) => setFormData({ ...formData, requested_by: e.target.value })}
               placeholder="Enter your name"
               className={validationErrors.requested_by ? 'border-red-500' : ''}
+              disabled={loading}
             />
             {validationErrors.requested_by && (
               <p className="text-sm text-red-500">{validationErrors.requested_by}</p>
@@ -340,6 +369,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               placeholder="Add any additional notes..."
               rows={3}
+              disabled={loading}
             />
           </div>
 

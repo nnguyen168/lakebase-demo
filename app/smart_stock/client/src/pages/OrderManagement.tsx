@@ -24,6 +24,7 @@ import {
   TrendingDown, AlertTriangle
 } from 'lucide-react';
 import CreateOrderModal from '@/components/CreateOrderModal';
+import OrderSuccessModal from '@/components/OrderSuccessModal';
 import EditOrderModal from '@/components/EditOrderModal';
 import ForecastModal from '@/components/ForecastModal';
 
@@ -76,6 +77,8 @@ const OrderManagement: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<OrderData | null>(null);
   const [isForecastModalOpen, setIsForecastModalOpen] = useState(false);
   const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryForecastData | null>(null);
+  const [isOrderSuccessModalOpen, setIsOrderSuccessModalOpen] = useState(false);
+  const [successOrderData, setSuccessOrderData] = useState<any>(null);
 
   useEffect(() => {
     fetchData();
@@ -212,6 +215,17 @@ const OrderManagement: React.FC = () => {
 
   const handleOrderCreated = () => {
     fetchData(); // Refresh all data
+  };
+
+  const handleOrderSuccess = (orderData: any) => {
+    // Show success modal with order data
+    setSuccessOrderData(orderData);
+    setIsOrderSuccessModalOpen(true);
+  };
+
+  const closeOrderSuccessModal = () => {
+    setIsOrderSuccessModalOpen(false);
+    setSuccessOrderData(null);
   };
 
   const handleSeeForecast = (item: InventoryForecastData) => {
@@ -515,6 +529,14 @@ const OrderManagement: React.FC = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onOrderCreated={handleOrderCreated}
+        onOrderSuccess={handleOrderSuccess}
+      />
+
+      <OrderSuccessModal
+        isOpen={isOrderSuccessModalOpen}
+        onClose={closeOrderSuccessModal}
+        onRefreshData={handleOrderCreated}
+        orderData={successOrderData}
       />
       
       <EditOrderModal

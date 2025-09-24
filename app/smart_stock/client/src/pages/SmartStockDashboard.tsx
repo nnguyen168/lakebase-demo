@@ -22,6 +22,7 @@ import { TransactionResponse, TransactionManagementKPI, InventoryForecastRespons
 import { TransactionManagement } from '@/components/TransactionManagement';
 import ForecastModal from '@/components/ForecastModal';
 import CreateOrderModal from '@/components/CreateOrderModal';
+import OrderSuccessModal from '@/components/OrderSuccessModal';
 import { useUserInfo } from '@/hooks/useUserInfo';
 
 // Elena's KPIs
@@ -63,6 +64,8 @@ const SmartStockDashboard: React.FC = () => {
   const [selectedForecastItem, setSelectedForecastItem] = useState<InventoryForecastResponse | null>(null);
   const [createOrderModalOpen, setCreateOrderModalOpen] = useState(false);
   const [selectedOrderItem, setSelectedOrderItem] = useState<InventoryForecastResponse | null>(null);
+  const [orderSuccessModalOpen, setOrderSuccessModalOpen] = useState(false);
+  const [successOrderData, setSuccessOrderData] = useState<any>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -213,6 +216,17 @@ const SmartStockDashboard: React.FC = () => {
   const handleOrderCreated = () => {
     // Refresh dashboard data after order creation
     loadDashboardData();
+  };
+
+  const handleOrderSuccess = (orderData: any) => {
+    // Show success modal with order data
+    setSuccessOrderData(orderData);
+    setOrderSuccessModalOpen(true);
+  };
+
+  const closeOrderSuccessModal = () => {
+    setOrderSuccessModalOpen(false);
+    setSuccessOrderData(null);
   };
 
   if (loading) {
@@ -618,7 +632,16 @@ const SmartStockDashboard: React.FC = () => {
         isOpen={createOrderModalOpen}
         onClose={closeCreateOrderModal}
         onOrderCreated={handleOrderCreated}
+        onOrderSuccess={handleOrderSuccess}
         selectedItem={selectedOrderItem}
+      />
+
+      {/* Order Success Modal */}
+      <OrderSuccessModal
+        isOpen={orderSuccessModalOpen}
+        onClose={closeOrderSuccessModal}
+        onRefreshData={handleOrderCreated}
+        orderData={successOrderData}
       />
     </div>
   );

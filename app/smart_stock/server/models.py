@@ -223,6 +223,56 @@ class InventoryForecastResponse(BaseModel):
         from_attributes = True
 
 
+# Order Models
+class OrderStatus(str, Enum):
+    """Order status enumeration."""
+    PENDING = "pending"
+    APPROVED = "approved" 
+    ORDERED = "ordered"
+    RECEIVED = "received"
+    CANCELLED = "cancelled"
+
+
+class OrderBase(BaseModel):
+    """Base order model."""
+    product_id: int
+    quantity: int
+    requested_by: str
+    status: OrderStatus = OrderStatus.PENDING
+    notes: Optional[str] = None
+
+
+class Order(OrderBase):
+    """Order model with ID."""
+    order_id: int
+    order_number: str
+    created_at: datetime
+    updated_at: datetime
+
+    # Joined fields for display
+    product_name: Optional[str] = None
+    product_sku: Optional[str] = None
+    unit_price: Optional[Decimal] = None
+
+    class Config:
+        from_attributes = True
+
+
+class OrderCreate(BaseModel):
+    """Model for creating a new order."""
+    product_id: int
+    quantity: int
+    requested_by: str
+    notes: Optional[str] = None
+
+
+class OrderUpdate(BaseModel):
+    """Model for updating an order."""
+    status: Optional[OrderStatus] = None
+    quantity: Optional[int] = None
+    notes: Optional[str] = None
+
+
 # KPI Models
 class TransactionManagementKPI(BaseModel):
     """KPI data for transaction management."""
