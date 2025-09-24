@@ -2,3 +2,4 @@
 .databricks
 product_info_pdfs/
 __pycache__/
+.vscode/
