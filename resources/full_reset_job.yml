@@ -15,9 +15,6 @@ resources:
       name: smart_stock_full_reset_job
       max_concurrent_runs: 1
       performance_target: PERFORMANCE_OPTIMIZED
-      permissions:
-        - level: CAN_MANAGE
-          group_name: smart_stock_group
       tasks:
         - task_key: create_lakebase_tables
           notebook_task:

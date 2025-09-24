@@ -26,7 +26,11 @@ targets:
     workspace:
       host: https://dbc-ea2c343f-6f56.cloud.databricks.com/
     permissions:
-      - group_name: smart_stock_group
+      - user_name: lars.liahagen@databricks.com
+        level: CAN_MANAGE
+      - user_name: nam.nguyen@databricks.com
+        level: CAN_MANAGE
+      - user_name: fabien.contaminard@databricks.com
         level: CAN_MANAGE
 
   prod:
@@ -37,5 +41,9 @@ targets:
       host: https://dbc-ea2c343f-6f56.cloud.databricks.com/
       root_path: /Shared/smart_stock
     permissions:
-      - group_name: smart_stock_group
+      - user_name: lars.liahagen@databricks.com
+        level: CAN_MANAGE
+      - user_name: nam.nguyen@databricks.com
+        level: CAN_MANAGE
+      - user_name: fabien.contaminard@databricks.com
         level: CAN_MANAGE
