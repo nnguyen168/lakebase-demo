@@ -20,8 +20,10 @@ import {
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client';
 import { TransactionResponse, TransactionManagementKPI } from '@/fastapi_client';
+import { useUserInfo } from '@/hooks/useUserInfo';
 
 const TransactionsDashboard: React.FC = () => {
+  const { displayName, role } = useUserInfo();
   const [activeTab, setActiveTab] = useState('transactions');
   const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
   const [kpi, setKpi] = useState<TransactionManagementKPI | null>(null);
@@ -150,8 +152,8 @@ const TransactionsDashboard: React.FC = () => {
                 {transactions.length} Transactions
               </Badge>
               <div className="text-right">
-                <p className="text-sm font-medium">Elena Rodriguez</p>
-                <p className="text-xs text-gray-600">Senior Inventory Planner</p>
+                <p className="text-sm font-medium">{displayName}</p>
+                <p className="text-xs text-gray-600">{role}</p>
               </div>
             </div>
           </div>

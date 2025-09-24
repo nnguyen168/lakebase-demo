@@ -1,6 +1,7 @@
 import { InventoryService } from './services/InventoryService';
 import { TransactionsService } from './services/TransactionsService';
 import { UserService } from './services/UserService';
+import { ProductsService } from './services/ProductsService';
 
 // Unified API client for SmartStock
 export const apiClient = {
@@ -18,6 +19,13 @@ export const apiClient = {
   deleteTransaction: TransactionsService.deleteTransactionApiTransactionsTransactionIdDelete,
 
   // User methods
-  getUserInfo: UserService.getUserInfoApiUserMeGet,
-  getUserWorkspaceInfo: UserService.getUserWorkspaceInfoApiUserWorkspaceGet
+  getUserInfo: UserService.getCurrentUserApiUserMeGet,
+  getUserWorkspaceInfo: UserService.getUserWorkspaceInfoApiUserMeWorkspaceGet,
+
+  // Product methods
+  getProducts: ProductsService.getProductsApiProductsGet,
+  getProduct: ProductsService.getProductApiProductsProductIdGet,
+  createProduct: ProductsService.createProductApiProductsPost,
+  updateProduct: ProductsService.updateProductApiProductsProductIdPut,
+  deleteProduct: ProductsService.deleteProductApiProductsProductIdDelete
 };

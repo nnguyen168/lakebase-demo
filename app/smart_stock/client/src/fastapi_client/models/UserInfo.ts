@@ -8,6 +8,7 @@
 export type UserInfo = {
     userName: string;
     displayName?: (string | null);
+    role?: (string | null);
     active: boolean;
     emails?: Array<string>;
 };

@@ -9,6 +9,9 @@ import type { InventoryForecastUpdate } from '../models/InventoryForecastUpdate'
 import type { InventoryTransaction } from '../models/InventoryTransaction';
 import type { InventoryTransactionCreate } from '../models/InventoryTransactionCreate';
 import type { InventoryTransactionUpdate } from '../models/InventoryTransactionUpdate';
+import type { Product } from '../models/Product';
+import type { ProductCreate } from '../models/ProductCreate';
+import type { ProductUpdate } from '../models/ProductUpdate';
 import type { StockManagementAlertKPI } from '../models/StockManagementAlertKPI';
 import type { TransactionManagementKPI } from '../models/TransactionManagementKPI';
 import type { TransactionResponse } from '../models/TransactionResponse';
@@ -238,6 +241,123 @@ export class ApiService {
             },
             body: requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Products
+     * Get all products with optional filters.
+     * @param category Filter by product category
+     * @param search Search in product name or SKU
+     * @param limit Maximum number of products to return
+     * @param offset Number of products to skip
+     * @returns Product Successful Response
+     * @throws ApiError
+     */
+    public static getProductsApiProductsGet(
+        category?: (string | null),
+        search?: (string | null),
+        limit: number = 100,
+        offset?: number,
+    ): CancelablePromise<Array<Product>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/products/',
+            query: {
+                'category': category,
+                'search': search,
+                'limit': limit,
+                'offset': offset,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Create Product
+     * Create a new product.
+     * @param requestBody
+     * @returns Product Successful Response
+     * @throws ApiError
+     */
+    public static createProductApiProductsPost(
+        requestBody: ProductCreate,
+    ): CancelablePromise<Product> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/products/',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Product
+     * Get a specific product by ID.
+     * @param productId
+     * @returns Product Successful Response
+     * @throws ApiError
+     */
+    public static getProductApiProductsProductIdGet(
+        productId: number,
+    ): CancelablePromise<Product> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/products/{product_id}',
+            path: {
+                'product_id': productId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Update Product
+     * Update a product.
+     * @param productId
+     * @param requestBody
+     * @returns Product Successful Response
+     * @throws ApiError
+     */
+    public static updateProductApiProductsProductIdPut(
+        productId: number,
+        requestBody: ProductUpdate,
+    ): CancelablePromise<Product> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/products/{product_id}',
+            path: {
+                'product_id': productId,
+            },
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Delete Product
+     * Delete a product.
+     * @param productId
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static deleteProductApiProductsProductIdDelete(
+        productId: number,
+    ): CancelablePromise<any> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/products/{product_id}',
+            path: {
+                'product_id': productId,
+            },
             errors: {
                 422: `Validation Error`,
             },

@@ -21,6 +21,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
+import { apiClient } from '@/fastapi_client';
 
 interface Product {
   product_id: number;
@@ -29,30 +30,11 @@ interface Product {
   price: number;
   unit: string;
   category?: string;
-  expiration_days?: number;
-  storage_temp?: string;
-  allergens?: string;
-  organic?: boolean;
-}
-
-interface Customer {
-  customer_id: number;
-  name: string;
-  email: string;
-  customer_type?: string;
-}
-
-interface Store {
-  store_id: number;
-  name: string;
-  location?: string;
-  type: string;
+  reorder_level?: number;
 }
 
 interface CreateOrderFormData {
   product_id: number | null;
-  customer_id: number | null;
-  store_id: number | null;
   quantity: number;
   requested_by: string;
   notes: string;
@@ -62,98 +44,125 @@ interface CreateOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOrderCreated: () => void;
+  selectedItem?: any; // InventoryForecastResponse from dashboard
 }
 
 const CreateOrderModal: React.FC<CreateOrderModalProps> = ({ 
   isOpen, 
   onClose, 
-  onOrderCreated 
+  onOrderCreated,
+  selectedItem
 }) => {
   const [formData, setFormData] = useState<CreateOrderFormData>({
     product_id: null,
-    customer_id: null,
-    store_id: '',
     quantity: 1,
     requested_by: '',
     notes: '',
   });
   
   const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [userName, setUserName] = useState<string>('');
 
   useEffect(() => {
     if (isOpen) {
       fetchDropdownData();
+      fetchUserInfo();
       resetForm();
     }
   }, [isOpen]);
 
+  // Effect to update requested_by when userName changes
+  useEffect(() => {
+    console.log('userName effect triggered:', { userName, isOpen });
+    if (userName && isOpen) {
+      console.log('Updating form data with userName:', userName);
+      setFormData(prev => ({
+        ...prev,
+        requested_by: userName
+      }));
+    }
+  }, [userName, isOpen]);
+
+  // Effect to prefill form when selectedItem is provided
+  useEffect(() => {
+    if (selectedItem && products.length > 0) {
+      // Try to find matching product by item_id or item_name
+      const matchingProduct = products.find(p => 
+        p.sku === selectedItem.item_id || 
+        p.name.toLowerCase().includes(selectedItem.item_name.toLowerCase())
+      );
+      
+      if (matchingProduct) {
+        setFormData(prev => ({
+          ...prev,
+          product_id: matchingProduct.product_id,
+          quantity: Math.max(1, selectedItem.forecast_30_days || 1),
+          notes: `Reorder recommendation based on forecast: ${selectedItem.action}. Current stock: ${selectedItem.stock}, 30-day forecast: ${selectedItem.forecast_30_days}`
+        }));
+      }
+    }
+  }, [selectedItem, products]);
+
   const resetForm = () => {
     setFormData({
       product_id: null,
-      customer_id: null,
-      store_id: null,
       quantity: 1,
-      requested_by: '',
+      requested_by: userName, // Pre-fill with user name
       notes: '',
     });
     setValidationErrors({});
     setError(null);
   };
 
+  const fetchUserInfo = async () => {
+    try {
+      console.log('Fetching user info...');
+      const userInfo = await apiClient.getUserInfo();
+      console.log('User info received:', userInfo);
+      if (userInfo && userInfo.displayName) {
+        // Combine displayName and role if both are available
+        const fullName = userInfo.displayName;
+        console.log('Setting userName to:', fullName);
+        setUserName(fullName);
+      } else if (userInfo && userInfo.userName) {
+        console.log('Setting userName to userName:', userInfo.userName);
+        // If no displayName, use userName as fallback
+        setUserName(userInfo.userName);
+      }
+    } catch (err) {
+      console.warn('Could not fetch user info:', err);
+      // Fallback to a default name or leave empty
+      setUserName('');
+    }
+  };
+
   const fetchDropdownData = async () => {
     try {
-      // Fetch products from PostgreSQL database
-      const productsResponse = await fetch('/debug/products');
-      if (productsResponse.ok) {
-        const productsData = await productsResponse.json();
-        if (productsData.status === 'success') {
-          setProducts(productsData.products);
+      // Fetch products using apiClient
+      try {
+        const productsData = await apiClient.getProducts();
+        setProducts(productsData);
+      } catch (apiError) {
+        console.warn('API client failed, trying fallback:', apiError);
+        // Fallback to debug endpoint
+        const debugResponse = await fetch('/debug/products');
+        if (debugResponse.ok) {
+          const debugData = await debugResponse.json();
+          if (debugData.status === 'success') {
+            setProducts(debugData.products);
+          } else {
+            throw new Error('Failed to load products from database');
+          }
         } else {
-          throw new Error('Failed to load products from database');
+          throw new Error('Failed to fetch products');
         }
-      } else {
-        throw new Error('Failed to fetch products');
       }
-
-      // Fetch customers from PostgreSQL database
-      const customersResponse = await fetch('/debug/customers');
-      if (customersResponse.ok) {
-        const customersData = await customersResponse.json();
-        if (customersData.status === 'success') {
-          setCustomers(customersData.customers);
-        } else {
-          // Fallback to enhanced mock customers
-          setCustomers([
-            { customer_id: 1, name: 'Pacific Northwest Hotels', email: 'orders@pnwhotels.com', customer_type: 'hotel' },
-            { customer_id: 2, name: 'Elite Catering Services', email: 'purchasing@elitecatering.com', customer_type: 'catering' },
-            { customer_id: 3, name: 'Sunshine Restaurant Group', email: 'supply@sunshinerestaurants.com', customer_type: 'restaurant' },
-          ]);
-        }
-      } else {
-        // Fallback to enhanced mock customers
-        setCustomers([
-          { customer_id: 1, name: 'Pacific Northwest Hotels', email: 'orders@pnwhotels.com', customer_type: 'hotel' },
-          { customer_id: 2, name: 'Elite Catering Services', email: 'purchasing@elitecatering.com', customer_type: 'catering' },
-          { customer_id: 3, name: 'Sunshine Restaurant Group', email: 'supply@sunshinerestaurants.com', customer_type: 'restaurant' },
-        ]);
-      }
-
-      // Fetch stores - fallback to mock data
-      setStores([
-        { store_id: 1, name: 'Downtown Bistro', location: 'Portland, OR', type: 'restaurant' },
-        { store_id: 2, name: 'Central Food Warehouse', location: 'Portland, OR', type: 'warehouse' },
-        { store_id: 3, name: 'Morning Glory Cafe', location: 'Seattle, WA', type: 'cafe' },
-        { store_id: 4, name: 'Gourmet Express Food Truck', location: 'Mobile', type: 'food_truck' },
-        { store_id: 5, name: 'The Garden Restaurant', location: 'San Francisco, CA', type: 'restaurant' },
-      ]);
     } catch (err) {
-      setError('Failed to load form data from database');
-      console.error('Error fetching dropdown data:', err);
+      setError('Failed to load products from database');
+      console.error('Error fetching products:', err);
     }
   };
 
@@ -162,14 +171,6 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
     
     if (!formData.product_id) {
       errors.product_id = 'Product is required';
-    }
-    
-    if (!formData.customer_id) {
-      errors.customer_id = 'Customer is required';
-    }
-    
-    if (!formData.store_id) {
-      errors.store_id = 'Store is required';
     }
     
     if (!formData.quantity || formData.quantity < 1) {
@@ -202,8 +203,6 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
         },
         body: JSON.stringify({
           product_id: formData.product_id,
-          customer_id: formData.customer_id,
-          store_id: formData.store_id,
           quantity: formData.quantity,
           requested_by: formData.requested_by,
           status: 'pending',
@@ -231,9 +230,14 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Create New Food & Beverage Order</DialogTitle>
+          <DialogTitle>
+            {selectedItem ? 'Create Reorder Based on Recommendation' : 'Create New Product Order'}
+          </DialogTitle>
           <DialogDescription>
-            Place an order for fresh ingredients, beverages, and specialty food items.
+            {selectedItem 
+              ? `Reorder recommendation for ${selectedItem.item_name} - ${selectedItem.action}`
+              : 'Place an order for products based on inventory recommendations.'
+            }
           </DialogDescription>
         </DialogHeader>
         
@@ -252,24 +256,21 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
               value={formData.product_id?.toString() || ''}
               onValueChange={(value) => setFormData({ ...formData, product_id: parseInt(value) })}
             >
-              <SelectTrigger className={validationErrors.product_id ? 'border-red-500' : ''}>
+              <SelectTrigger className={`h-16 ${validationErrors.product_id ? 'border-red-500' : ''}`}>
                 <SelectValue placeholder="Select a product" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-w-lg">
                 {products.map((product) => (
-                  <SelectItem key={product.product_id} value={product.product_id.toString()}>
-                    <div className="flex flex-col space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{product.name}</span>
-                        <Badge variant="outline">${product.price}/{product.unit}</Badge>
+                  <SelectItem key={product.product_id} value={product.product_id.toString()} className="h-20 p-4">
+                    <div className="flex flex-col space-y-2 w-full">
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-medium text-base">{product.name}</span>
+                        <Badge variant="outline" className="ml-2">${product.price}/{product.unit}</Badge>
                       </div>
-                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                        <span>SKU: {product.sku}</span>
+                      <div className="flex items-center space-x-3 text-sm text-muted-foreground">
+                        <span className="font-mono">SKU: {product.sku}</span>
                         {product.category && (
                           <Badge variant="secondary" className="text-xs">{product.category}</Badge>
-                        )}
-                        {product.organic && (
-                          <Badge variant="outline" className="text-xs bg-green-50">Organic</Badge>
                         )}
                       </div>
                     </div>
@@ -286,84 +287,13 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
                 {selectedProduct.category && (
                   <p>Category: {selectedProduct.category}</p>
                 )}
-                {selectedProduct.storage_temp && (
-                  <p>Storage: {selectedProduct.storage_temp}</p>
-                )}
-                {selectedProduct.expiration_days && (
-                  <p className="text-orange-600">Shelf life: {selectedProduct.expiration_days} days</p>
-                )}
-                {selectedProduct.allergens && (
-                  <p className="text-red-600">⚠️ Contains: {selectedProduct.allergens}</p>
+                {selectedProduct.reorder_level && (
+                  <p>Reorder Level: {selectedProduct.reorder_level} {selectedProduct.unit}</p>
                 )}
               </div>
             )}
           </div>
 
-          {/* Customer Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="customer">Customer *</Label>
-            <Select
-              value={formData.customer_id?.toString() || ''}
-              onValueChange={(value) => setFormData({ ...formData, customer_id: parseInt(value) })}
-            >
-              <SelectTrigger className={validationErrors.customer_id ? 'border-red-500' : ''}>
-                <SelectValue placeholder="Select a customer" />
-              </SelectTrigger>
-              <SelectContent>
-                {customers.map((customer) => (
-                  <SelectItem key={customer.customer_id} value={customer.customer_id.toString()}>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-medium">{customer.name}</span>
-                        {customer.customer_type && (
-                          <Badge variant="outline" className="text-xs">
-                            {customer.customer_type}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-sm text-muted-foreground">{customer.email}</div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {validationErrors.customer_id && (
-              <p className="text-sm text-red-500">{validationErrors.customer_id}</p>
-            )}
-          </div>
-
-          {/* Store Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="store">Store *</Label>
-            <Select
-              value={formData.store_id?.toString() || ''}
-              onValueChange={(value) => setFormData({ ...formData, store_id: parseInt(value) })}
-            >
-              <SelectTrigger className={validationErrors.store_id ? 'border-red-500' : ''}>
-                <SelectValue placeholder="Select a store" />
-              </SelectTrigger>
-              <SelectContent>
-                {stores.map((store) => (
-                  <SelectItem key={store.store_id} value={store.store_id.toString()}>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-medium">{store.name}</span>
-                        <Badge variant="outline" className="text-xs">
-                          {store.type}
-                        </Badge>
-                      </div>
-                      {store.location && (
-                        <div className="text-sm text-muted-foreground">{store.location}</div>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {validationErrors.store_id && (
-              <p className="text-sm text-red-500">{validationErrors.store_id}</p>
-            )}
-          </div>
 
           {/* Quantity */}
           <div className="space-y-2">

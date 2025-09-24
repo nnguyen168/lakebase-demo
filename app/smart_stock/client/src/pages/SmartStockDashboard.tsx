@@ -15,12 +15,14 @@ import { Progress } from '@/components/ui/progress';
 import {
   AlertTriangle, Package, TrendingUp, Clock, Truck,
   CheckCircle, Factory, ArrowUp, ArrowDown,
-  Activity
+  Activity, ShoppingCart
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client';
 import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse } from '@/fastapi_client';
 import { TransactionManagement } from '@/components/TransactionManagement';
 import ForecastModal from '@/components/ForecastModal';
+import CreateOrderModal from '@/components/CreateOrderModal';
+import { useUserInfo } from '@/hooks/useUserInfo';
 
 // Elena's KPIs
 interface ElenaKPIs {
@@ -42,6 +44,7 @@ interface WarehouseData {
 }
 
 const SmartStockDashboard: React.FC = () => {
+  const { displayName, role } = useUserInfo();
   const [activeTab, setActiveTab] = useState('transactions');
   const [kpis, setKpis] = useState<ElenaKPIs>({
     onTimeProductionRate: 94.5,
@@ -58,6 +61,8 @@ const SmartStockDashboard: React.FC = () => {
   const itemsPerPage = 20;
   const [forecastModalOpen, setForecastModalOpen] = useState(false);
   const [selectedForecastItem, setSelectedForecastItem] = useState<InventoryForecastResponse | null>(null);
+  const [createOrderModalOpen, setCreateOrderModalOpen] = useState(false);
+  const [selectedOrderItem, setSelectedOrderItem] = useState<InventoryForecastResponse | null>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -195,6 +200,21 @@ const SmartStockDashboard: React.FC = () => {
     setSelectedForecastItem(null);
   };
 
+  const handleCreateOrder = (item: InventoryForecastResponse) => {
+    setSelectedOrderItem(item);
+    setCreateOrderModalOpen(true);
+  };
+
+  const closeCreateOrderModal = () => {
+    setCreateOrderModalOpen(false);
+    setSelectedOrderItem(null);
+  };
+
+  const handleOrderCreated = () => {
+    // Refresh dashboard data after order creation
+    loadDashboardData();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -227,8 +247,8 @@ const SmartStockDashboard: React.FC = () => {
                 Last updated: {new Date().toLocaleTimeString()}
               </Badge>
               <div className="text-right">
-                <p className="text-sm font-medium">Elena Rodriguez</p>
-                <p className="text-xs text-gray-600">Senior Inventory Planner</p>
+                <p className="text-sm font-medium">{displayName}</p>
+                <p className="text-xs text-gray-600">{role}</p>
               </div>
             </div>
           </div>
@@ -525,6 +545,7 @@ const SmartStockDashboard: React.FC = () => {
                         <TableHead>Status</TableHead>
                         <TableHead>Recommended Action</TableHead>
                         <TableHead>View Forecast</TableHead>
+                        <TableHead>Create Order</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -563,6 +584,17 @@ const SmartStockDashboard: React.FC = () => {
                               View Chart
                             </button>
                           </TableCell>
+                          <TableCell>
+                            <button
+                              onClick={() => handleCreateOrder(item)}
+                              className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition-colors duration-200 flex items-center gap-1"
+                              disabled={item.status === 'in_stock'}
+                              title={item.status === 'in_stock' ? 'Stock is sufficient' : 'Create reorder based on this recommendation'}
+                            >
+                              <ShoppingCart className="w-3 h-3" />
+                              {item.status === 'in_stock' ? 'In Stock' : 'Reorder'}
+                            </button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -579,6 +611,14 @@ const SmartStockDashboard: React.FC = () => {
         isOpen={forecastModalOpen}
         onClose={closeForecastModal}
         item={selectedForecastItem}
+      />
+
+      {/* Create Order Modal */}
+      <CreateOrderModal
+        isOpen={createOrderModalOpen}
+        onClose={closeCreateOrderModal}
+        onOrderCreated={handleOrderCreated}
+        selectedItem={selectedOrderItem}
       />
     </div>
   );

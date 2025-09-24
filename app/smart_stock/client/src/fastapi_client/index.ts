@@ -16,6 +16,9 @@ export type { InventoryStatus } from './models/InventoryStatus';
 export type { InventoryTransaction } from './models/InventoryTransaction';
 export type { InventoryTransactionCreate } from './models/InventoryTransactionCreate';
 export type { InventoryTransactionUpdate } from './models/InventoryTransactionUpdate';
+export type { Product } from './models/Product';
+export type { ProductCreate } from './models/ProductCreate';
+export type { ProductUpdate } from './models/ProductUpdate';
 export type { StockManagementAlertKPI } from './models/StockManagementAlertKPI';
 export type { TransactionManagementKPI } from './models/TransactionManagementKPI';
 export type { TransactionResponse } from './models/TransactionResponse';
@@ -28,6 +31,7 @@ export type { ValidationError } from './models/ValidationError';
 export { ApiService } from './services/ApiService';
 export { DefaultService } from './services/DefaultService';
 export { InventoryService } from './services/InventoryService';
+export { ProductsService } from './services/ProductsService';
 export { TransactionsService } from './services/TransactionsService';
 export { UserService } from './services/UserService';
 
