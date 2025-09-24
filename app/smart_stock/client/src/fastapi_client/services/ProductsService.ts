@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { PaginatedResponse_Product_ } from '../models/PaginatedResponse_Product_';
 import type { Product } from '../models/Product';
 import type { ProductCreate } from '../models/ProductCreate';
 import type { ProductUpdate } from '../models/ProductUpdate';
@@ -11,12 +12,12 @@ import { request as __request } from '../core/request';
 export class ProductsService {
     /**
      * Get Products
-     * Get all products with optional filters.
+     * Get all products with optional filters and pagination metadata.
      * @param category Filter by product category
      * @param search Search in product name or SKU
      * @param limit Maximum number of products to return
      * @param offset Number of products to skip
-     * @returns Product Successful Response
+     * @returns PaginatedResponse_Product_ Successful Response
      * @throws ApiError
      */
     public static getProductsApiProductsGet(
@@ -24,7 +25,7 @@ export class ProductsService {
         search?: (string | null),
         limit: number = 100,
         offset?: number,
-    ): CancelablePromise<Array<Product>> {
+    ): CancelablePromise<PaginatedResponse_Product_> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/products/',

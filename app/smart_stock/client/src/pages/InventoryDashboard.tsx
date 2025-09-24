@@ -16,10 +16,11 @@ import { Progress } from '@/components/ui/progress';
 import {
   AlertTriangle, Package, TrendingUp, Clock, Truck,
   CheckCircle, XCircle, ShoppingCart, AlertCircle,
-  Factory, Battery, Settings, Zap
+  Factory, Battery, Settings, Zap, Loader2
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client/client';
 import { useUserInfo } from '@/hooks/useUserInfo';
+import Pagination, { PaginationMeta } from '@/components/ui/pagination';
 
 // Elena's KPIs
 interface ElenaKPIs {
@@ -58,24 +59,54 @@ const InventoryDashboard: React.FC = () => {
   });
   const [components, setComponents] = useState<ComponentStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const [forecastLoading, setForecastLoading] = useState(false);
   const [forecast, setForecast] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any>(null);
+  
+  // Pagination state for forecast table
+  const [forecastPagination, setForecastPagination] = useState<PaginationMeta>({
+    total: 0,
+    limit: 8,
+    offset: 0,
+    has_next: false,
+    has_prev: false
+  });
 
   useEffect(() => {
     loadDashboardData();
   }, []);
 
   const loadDashboardData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
+      await Promise.all([
+        loadForecast(forecastPagination.offset, forecastPagination.limit),
+        loadAlerts()
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // Load forecast data
-      const forecastResponse = await apiClient.getInventoryForecast();
-      if (forecastResponse.data) {
-        setForecast(forecastResponse.data);
+  const loadForecast = async (offset: number = 0, limit: number = 8) => {
+    try {
+      setForecastLoading(true);
+
+      // Load forecast data with pagination
+      const forecastResponse = await apiClient.getInventoryForecast(
+        undefined, // warehouseId
+        undefined, // status
+        limit,
+        offset
+      );
+      
+      if (forecastResponse) {
+        const forecast = forecastResponse.items;
+        setForecast(forecast);
+        setForecastPagination(forecastResponse.pagination);
 
         // Transform forecast data to component status
-        const componentData: ComponentStatus[] = forecastResponse.data.map((item: any) => ({
+        const componentData: ComponentStatus[] = forecast.map((item: any) => ({
           sku: item.item_id,
           name: item.item_name,
           category: categorizeComponent(item.item_name),
@@ -90,17 +121,28 @@ const InventoryDashboard: React.FC = () => {
         }));
         setComponents(componentData);
       }
+    } catch (error) {
+      console.error('Error loading forecast:', error);
+    } finally {
+      setForecastLoading(false);
+    }
+  };
 
+  const loadAlerts = async () => {
+    try {
       // Load alerts
       const alertsResponse = await apiClient.getStockAlertsKpi();
-      if (alertsResponse.data) {
-        setAlerts(alertsResponse.data);
+      if (alertsResponse) {
+        setAlerts(alertsResponse);
       }
     } catch (error) {
-      console.error('Error loading dashboard:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error loading alerts:', error);
     }
+  };
+
+  // Pagination handler
+  const handleForecastPageChange = (offset: number, limit: number) => {
+    loadForecast(offset, limit);
   };
 
   const categorizeComponent = (name: string): ComponentStatus['category'] => {
@@ -463,23 +505,40 @@ const InventoryDashboard: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {forecast.slice(0, 8).map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{item.item_name}</TableCell>
-                          <TableCell>{item.stock.toLocaleString()}</TableCell>
-                          <TableCell>{item.forecast_30_days.toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge variant={item.action === 'Urgent Reorder' ? 'destructive' : 'secondary'}>
-                              {item.action}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Progress value={85 + Math.random() * 10} className="w-20" />
+                      {forecastLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="h-24 text-center">
+                            <div className="flex items-center justify-center">
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Loading forecast data...
+                            </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        forecast.map((item, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-medium">{item.item_name}</TableCell>
+                            <TableCell>{item.stock.toLocaleString()}</TableCell>
+                            <TableCell>{item.forecast_30_days.toLocaleString()}</TableCell>
+                            <TableCell>
+                              <Badge variant={item.action === 'Urgent Reorder' ? 'destructive' : 'secondary'}>
+                                {item.action}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Progress value={85 + Math.random() * 10} className="w-20" />
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
+                  <Pagination
+                    pagination={forecastPagination}
+                    onPageChange={handleForecastPageChange}
+                    showPageSize={true}
+                    pageSizeOptions={[5, 8, 15, 25]}
+                  />
                 </div>
               </CardContent>
             </Card>

@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ..models import (
     InventoryForecast, InventoryForecastUpdate, InventoryForecastResponse,
-    StockManagementAlertKPI, InventoryStatus, ForecastStatus
+    StockManagementAlertKPI, InventoryStatus, ForecastStatus,
+    PaginatedResponse, PaginationMeta
 )
 # Use database selector (automatically chooses mock or PostgreSQL)
 from ..db_selector import db
@@ -13,16 +14,39 @@ from ..db_selector import db
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
-@router.get("/forecast", response_model=List[InventoryForecastResponse])
+@router.get("/forecast", response_model=PaginatedResponse[InventoryForecastResponse])
 async def get_inventory_forecast(
     warehouse_id: Optional[int] = Query(None, description="Filter by warehouse ID"),
     status: Optional[ForecastStatus] = Query(None, description="Filter by forecast status"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of items to return"),
     offset: int = Query(0, ge=0, description="Number of items to skip")
 ):
-    """Get inventory forecast with optional filters."""
+    """Get inventory forecast with optional filters and pagination metadata."""
     try:
-        query = """
+        # Build base query for filtering
+        base_query = """
+            FROM inventory_forecast f
+            JOIN products p ON f.product_id = p.product_id
+            WHERE 1=1
+        """
+        
+        params = []
+        
+        if warehouse_id:
+            base_query += " AND f.warehouse_id = %s"
+            params.append(warehouse_id)
+        
+        if status:
+            base_query += " AND f.status = %s"
+            params.append(status.value)
+        
+        # Get total count
+        count_query = "SELECT COUNT(*) as total " + base_query
+        count_result = db.execute_query(count_query, params)
+        total = count_result[0]['total'] if count_result else 0
+        
+        # Get paginated results
+        data_query = """
             SELECT 
                 f.forecast_id,
                 p.sku as item_id,
@@ -43,26 +67,24 @@ async def get_inventory_forecast(
                     WHEN f.current_stock < f.reorder_point * 1.5 THEN 'Monitor'
                     ELSE 'No Action'
                 END as action
-            FROM inventory_forecast f
-            JOIN products p ON f.product_id = p.product_id
-            WHERE 1=1
-        """
+        """ + base_query + " ORDER BY f.last_updated DESC LIMIT %s OFFSET %s"
         
-        params = []
+        data_params = params + [limit, offset]
+        results = db.execute_query(data_query, data_params)
         
-        if warehouse_id:
-            query += " AND f.warehouse_id = %s"
-            params.append(warehouse_id)
-        
-        if status:
-            query += " AND f.status = %s"
-            params.append(status.value)
-        
-        query += " ORDER BY f.last_updated DESC LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
-        
-        results = db.execute_query(query, params)
-        return results
+        # Create pagination metadata
+        pagination = PaginationMeta(
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_next=offset + limit < total,
+            has_prev=offset > 0
+        )
+
+        return PaginatedResponse(
+            items=results,
+            pagination=pagination
+        )
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch inventory forecast: {str(e)}")

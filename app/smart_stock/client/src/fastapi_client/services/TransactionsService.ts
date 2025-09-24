@@ -5,8 +5,8 @@
 import type { InventoryTransaction } from '../models/InventoryTransaction';
 import type { InventoryTransactionCreate } from '../models/InventoryTransactionCreate';
 import type { InventoryTransactionUpdate } from '../models/InventoryTransactionUpdate';
+import type { PaginatedResponse_TransactionResponse_ } from '../models/PaginatedResponse_TransactionResponse_';
 import type { TransactionManagementKPI } from '../models/TransactionManagementKPI';
-import type { TransactionResponse } from '../models/TransactionResponse';
 import type { TransactionStatus } from '../models/TransactionStatus';
 import type { TransactionType } from '../models/TransactionType';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -15,13 +15,13 @@ import { request as __request } from '../core/request';
 export class TransactionsService {
     /**
      * Get Transactions
-     * Get list of inventory transactions with optional filters.
+     * Get list of inventory transactions with optional filters and pagination metadata.
      * @param status Filter by transaction status
      * @param warehouseId Filter by warehouse ID
      * @param transactionType Filter by transaction type
      * @param limit Maximum number of transactions to return
      * @param offset Number of transactions to skip
-     * @returns TransactionResponse Successful Response
+     * @returns PaginatedResponse_TransactionResponse_ Successful Response
      * @throws ApiError
      */
     public static getTransactionsApiTransactionsGet(
@@ -30,7 +30,7 @@ export class TransactionsService {
         transactionType?: (TransactionType | null),
         limit: number = 100,
         offset?: number,
-    ): CancelablePromise<Array<TransactionResponse>> {
+    ): CancelablePromise<PaginatedResponse_TransactionResponse_> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/transactions/',

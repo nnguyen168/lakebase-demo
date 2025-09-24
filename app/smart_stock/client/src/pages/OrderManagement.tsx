@@ -19,13 +19,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
-  AlertCircle, Package, ShoppingCart, Plus, Edit, TrendingUp
+  AlertCircle, Package, ShoppingCart, Plus, Edit, TrendingUp, Loader2
 } from 'lucide-react';
 import { getInventoryStatusStyle, getTransactionStatusStyle, formatStatusText } from '@/lib/status-utils';
+import Pagination, { PaginationMeta } from '@/components/ui/pagination';
 import CreateOrderModal from '@/components/CreateOrderModal';
 import OrderSuccessModal from '@/components/OrderSuccessModal';
 import EditOrderModal from '@/components/EditOrderModal';
 import ForecastModal from '@/components/ForecastModal';
+import { apiClient } from '@/fastapi_client/client';
 
 interface OrderData {
   order_id: number;
@@ -69,7 +71,17 @@ const OrderManagement: React.FC = () => {
   const [orderKPI, setOrderKPI] = useState<OrderKPI | null>(null);
   const [stockKPI, setStockKPI] = useState<StockKPI | null>(null);
   const [loading, setLoading] = useState(true);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Pagination state
+  const [inventoryPagination, setInventoryPagination] = useState<PaginationMeta>({
+    total: 0,
+    limit: 20,
+    offset: 0,
+    has_next: false,
+    has_prev: false
+  });
   
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -85,37 +97,70 @@ const OrderManagement: React.FC = () => {
   }, []);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch all data in parallel
-      const [ordersRes, inventoryRes, orderKPIRes, stockKPIRes] = await Promise.all([
-        fetch('/api/orders/'),
-        fetch('/api/inventory/forecast'),
-        fetch('/api/orders/kpi'),
-        fetch('/api/inventory/alerts/kpi'),
+      await Promise.all([
+        fetchOrders(),
+        fetchInventory(inventoryPagination.offset, inventoryPagination.limit),
+        fetchKPIs()
       ]);
-
-      if (!ordersRes.ok || !inventoryRes.ok || !orderKPIRes.ok || !stockKPIRes.ok) {
-        throw new Error('Failed to fetch data');
-      }
-
-      const [ordersData, inventoryData, orderKPIData, stockKPIData] = await Promise.all([
-        ordersRes.json(),
-        inventoryRes.json(),
-        orderKPIRes.json(),
-        stockKPIRes.json(),
-      ]);
-
-      setOrders(ordersData);
-      setInventory(inventoryData);
-      setOrderKPI(orderKPIData);
-      setStockKPI(stockKPIData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      const ordersRes = await fetch('/api/orders/');
+      if (!ordersRes.ok) {
+        throw new Error('Failed to fetch orders');
+      }
+      const ordersData = await ordersRes.json();
+      setOrders(ordersData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch orders');
+    }
+  };
+
+  const fetchInventory = async (offset: number = 0, limit: number = 20) => {
+    try {
+      setInventoryLoading(true);
+      
+      // Use API client for inventory with pagination
+      const inventoryResponse = await apiClient.getInventoryForecast(
+        undefined, // warehouseId
+        undefined, // status
+        limit,
+        offset
+      );
+      
+      if (inventoryResponse) {
+        setInventory(inventoryResponse.items);
+        setInventoryPagination(inventoryResponse.pagination);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch inventory');
+    } finally {
+      setInventoryLoading(false);
+    }
+  };
+
+  const fetchKPIs = async () => {
+    try {
+      const [orderKPIRes, stockKPIRes] = await Promise.all([
+        fetch('/api/orders/kpi'),
+        apiClient.getStockAlertsKpi(),
+      ]);
+
+      if (!orderKPIRes.ok) {
+        throw new Error('Failed to fetch order KPIs');
+      }
+
+      const orderKPIData = await orderKPIRes.json();
+      setOrderKPI(orderKPIData);
+      setStockKPI(stockKPIRes);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch KPIs');
     }
   };
 
@@ -143,6 +188,11 @@ const OrderManagement: React.FC = () => {
 
   const handleOrderCreated = () => {
     fetchData(); // Refresh all data
+  };
+
+  // Pagination handler
+  const handleInventoryPageChange = (offset: number, limit: number) => {
+    fetchInventory(offset, limit);
   };
 
   const handleOrderSuccess = (orderData: any) => {
@@ -411,42 +461,59 @@ const OrderManagement: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {inventory.map((item) => (
-                    <TableRow key={item.item_id}>
-                      <TableCell className="font-medium">{item.item_id}</TableCell>
-                      <TableCell>{item.item_name}</TableCell>
-                      <TableCell>{item.stock}</TableCell>
-                      <TableCell>{item.forecast_30_days}</TableCell>
-                      <TableCell>
-                        {(() => {
-                          const statusStyle = getInventoryStatusStyle(item.status);
-                          const StatusIcon = statusStyle.icon;
-                          return (
-                            <Badge 
-                              variant={statusStyle.variant}
-                              className={`${statusStyle.className} flex items-center gap-1 w-fit`}
-                            >
-                              <StatusIcon className="h-3 w-3" />
-                              {formatStatusText(item.status)}
-                            </Badge>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleSeeForecast(item)}
-                          className="flex items-center gap-2"
-                        >
-                          <TrendingUp className="h-3 w-3" />
-                          See Forecast
-                        </Button>
+                  {inventoryLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-24 text-center">
+                        <div className="flex items-center justify-center">
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Loading inventory data...
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    inventory.map((item) => (
+                      <TableRow key={item.forecast_id || item.item_id}>
+                        <TableCell className="font-medium">{item.item_id}</TableCell>
+                        <TableCell>{item.item_name}</TableCell>
+                        <TableCell>{item.stock}</TableCell>
+                        <TableCell>{item.forecast_30_days}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const statusStyle = getInventoryStatusStyle(item.status);
+                            const StatusIcon = statusStyle.icon;
+                            return (
+                              <Badge 
+                                variant={statusStyle.variant}
+                                className={`${statusStyle.className} flex items-center gap-1 w-fit`}
+                              >
+                                <StatusIcon className="h-3 w-3" />
+                                {formatStatusText(item.status)}
+                              </Badge>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleSeeForecast(item)}
+                            className="flex items-center gap-2"
+                          >
+                            <TrendingUp className="h-3 w-3" />
+                            See Forecast
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
+              <Pagination
+                pagination={inventoryPagination}
+                onPageChange={handleInventoryPageChange}
+                showPageSize={true}
+                pageSizeOptions={[10, 20, 50, 100]}
+              />
             </CardContent>
           </Card>
         </TabsContent>

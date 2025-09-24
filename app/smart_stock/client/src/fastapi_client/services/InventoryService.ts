@@ -4,8 +4,8 @@
 /* eslint-disable */
 import type { ForecastStatus } from '../models/ForecastStatus';
 import type { InventoryForecast } from '../models/InventoryForecast';
-import type { InventoryForecastResponse } from '../models/InventoryForecastResponse';
 import type { InventoryForecastUpdate } from '../models/InventoryForecastUpdate';
+import type { PaginatedResponse_InventoryForecastResponse_ } from '../models/PaginatedResponse_InventoryForecastResponse_';
 import type { StockManagementAlertKPI } from '../models/StockManagementAlertKPI';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
@@ -13,12 +13,12 @@ import { request as __request } from '../core/request';
 export class InventoryService {
     /**
      * Get Inventory Forecast
-     * Get inventory forecast with optional filters.
+     * Get inventory forecast with optional filters and pagination metadata.
      * @param warehouseId Filter by warehouse ID
      * @param status Filter by forecast status
      * @param limit Maximum number of items to return
      * @param offset Number of items to skip
-     * @returns InventoryForecastResponse Successful Response
+     * @returns PaginatedResponse_InventoryForecastResponse_ Successful Response
      * @throws ApiError
      */
     public static getInventoryForecastApiInventoryForecastGet(
@@ -26,7 +26,7 @@ export class InventoryService {
         status?: (ForecastStatus | null),
         limit: number = 100,
         offset?: number,
-    ): CancelablePromise<Array<InventoryForecastResponse>> {
+    ): CancelablePromise<PaginatedResponse_InventoryForecastResponse_> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/inventory/forecast',

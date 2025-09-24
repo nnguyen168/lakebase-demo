@@ -6,7 +6,8 @@ from datetime import datetime
 
 from ..models import (
     InventoryTransaction, InventoryTransactionCreate, InventoryTransactionUpdate,
-    TransactionResponse, TransactionManagementKPI, TransactionStatus, TransactionType
+    TransactionResponse, TransactionManagementKPI, TransactionStatus, TransactionType,
+    PaginatedResponse, PaginationMeta
 )
 # Use database selector
 from ..db_selector import db
@@ -14,7 +15,7 @@ from ..db_selector import db
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 
-@router.get("/", response_model=List[TransactionResponse])
+@router.get("/", response_model=PaginatedResponse[TransactionResponse])
 async def get_transactions(
     status: Optional[TransactionStatus] = Query(None, description="Filter by transaction status"),
     warehouse_id: Optional[int] = Query(None, description="Filter by warehouse ID"),
@@ -22,18 +23,10 @@ async def get_transactions(
     limit: int = Query(100, ge=1, le=500, description="Maximum number of transactions to return"),
     offset: int = Query(0, ge=0, description="Number of transactions to skip")
 ):
-    """Get list of inventory transactions with optional filters."""
+    """Get list of inventory transactions with optional filters and pagination metadata."""
     try:
-        query = """
-            SELECT
-                t.transaction_id,
-                t.transaction_number,
-                p.name as product,
-                t.quantity_change,
-                w.name as warehouse,
-                t.transaction_type,
-                t.transaction_timestamp,
-                t.status
+        # Build base query for filtering
+        base_query = """
             FROM inventory_transactions t
             JOIN products p ON t.product_id = p.product_id
             JOIN warehouses w ON t.warehouse_id = w.warehouse_id
@@ -43,22 +36,51 @@ async def get_transactions(
         params = []
 
         if status:
-            query += " AND t.status = %s"
+            base_query += " AND t.status = %s"
             params.append(status.value)
 
         if warehouse_id:
-            query += " AND t.warehouse_id = %s"
+            base_query += " AND t.warehouse_id = %s"
             params.append(warehouse_id)
 
         if transaction_type:
-            query += " AND t.transaction_type = %s"
+            base_query += " AND t.transaction_type = %s"
             params.append(transaction_type.value)
 
-        query += " ORDER BY t.transaction_timestamp DESC LIMIT %s OFFSET %s"
-        params.extend([limit, offset])
+        # Get total count
+        count_query = "SELECT COUNT(*) as total " + base_query
+        count_result = db.execute_query(count_query, tuple(params) if params else None)
+        total = count_result[0]['total'] if count_result else 0
 
-        results = db.execute_query(query, tuple(params) if params else None)
-        return results
+        # Get paginated results
+        data_query = """
+            SELECT
+                t.transaction_id,
+                t.transaction_number,
+                p.name as product,
+                t.quantity_change,
+                w.name as warehouse,
+                t.transaction_type,
+                t.transaction_timestamp,
+                t.status
+        """ + base_query + " ORDER BY t.transaction_timestamp DESC LIMIT %s OFFSET %s"
+        
+        data_params = params + [limit, offset]
+        results = db.execute_query(data_query, tuple(data_params))
+
+        # Create pagination metadata
+        pagination = PaginationMeta(
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_next=offset + limit < total,
+            has_prev=offset > 0
+        )
+
+        return PaginatedResponse(
+            items=results,
+            pagination=pagination
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch transactions: {str(e)}")

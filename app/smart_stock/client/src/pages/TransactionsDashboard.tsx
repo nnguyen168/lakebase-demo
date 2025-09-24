@@ -16,12 +16,13 @@ import { Progress } from '@/components/ui/progress';
 import {
   AlertTriangle, Package, TrendingUp, Clock, Truck,
   CheckCircle, ArrowUp, ArrowDown, Factory, Battery,
-  Settings, Zap, Activity, BarChart3, Package2
+  Settings, Zap, Activity, BarChart3, Package2, Loader2
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client/client';
 import { TransactionResponse, TransactionManagementKPI } from '@/fastapi_client';
 import { useUserInfo } from '@/hooks/useUserInfo';
 import { getTransactionStatusStyle, formatStatusText } from '@/lib/status-utils';
+import Pagination, { PaginationMeta } from '@/components/ui/pagination';
 
 const TransactionsDashboard: React.FC = () => {
   const { displayName, role } = useUserInfo();
@@ -29,27 +30,58 @@ const TransactionsDashboard: React.FC = () => {
   const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
   const [kpi, setKpi] = useState<TransactionManagementKPI | null>(null);
   const [loading, setLoading] = useState(true);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [productSummary, setProductSummary] = useState<Map<string, { inbound: number, sales: number, net: number }>>(new Map());
   const [warehouseSummary, setWarehouseSummary] = useState<Map<string, { inbound: number, sales: number, transactions: number }>>(new Map());
+  
+  // Pagination state
+  const [transactionsPagination, setTransactionsPagination] = useState<PaginationMeta>({
+    total: 0,
+    limit: 25,
+    offset: 0,
+    has_next: false,
+    has_prev: false
+  });
 
   useEffect(() => {
     loadDashboardData();
   }, []);
 
   const loadDashboardData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
+      await Promise.all([
+        loadTransactions(transactionsPagination.offset, transactionsPagination.limit),
+        loadKpis()
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // Load transactions
-      const transactionsResponse = await apiClient.getTransactions();
-      if (transactionsResponse.data) {
-        setTransactions(transactionsResponse.data);
+  const loadTransactions = async (offset: number = 0, limit: number = 25) => {
+    try {
+      setTransactionsLoading(true);
+
+      // Load transactions with pagination
+      const transactionsResponse = await apiClient.getTransactions(
+        undefined, // status
+        undefined, // warehouseId
+        undefined, // transactionType
+        limit,
+        offset
+      );
+      
+      if (transactionsResponse) {
+        const transactions = transactionsResponse.items;
+        setTransactions(transactions);
+        setTransactionsPagination(transactionsResponse.pagination);
 
         // Calculate summaries
         const prodSummary = new Map<string, { inbound: number, sales: number, net: number }>();
         const whSummary = new Map<string, { inbound: number, sales: number, transactions: number }>();
 
-        transactionsResponse.data.forEach((t: TransactionResponse) => {
+        transactions.forEach((t: TransactionResponse) => {
           // Product summary
           if (!prodSummary.has(t.product)) {
             prodSummary.set(t.product, { inbound: 0, sales: 0, net: 0 });
@@ -78,17 +110,28 @@ const TransactionsDashboard: React.FC = () => {
         setProductSummary(prodSummary);
         setWarehouseSummary(whSummary);
       }
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  };
 
+  const loadKpis = async () => {
+    try {
       // Load KPIs
       const kpiResponse = await apiClient.getTransactionKpi();
-      if (kpiResponse.data) {
-        setKpi(kpiResponse.data);
+      if (kpiResponse) {
+        setKpi(kpiResponse);
       }
     } catch (error) {
-      console.error('Error loading dashboard:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error loading KPIs:', error);
     }
+  };
+
+  // Pagination handler
+  const handleTransactionsPageChange = (offset: number, limit: number) => {
+    loadTransactions(offset, limit);
   };
 
   const getStatusBadge = (status: string) => {
@@ -254,25 +297,42 @@ const TransactionsDashboard: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {transactions.slice(0, 20).map((transaction) => (
-                      <TableRow key={transaction.transaction_id}>
-                        <TableCell>{getTransactionIcon(transaction.transaction_type)}</TableCell>
-                        <TableCell className="font-mono text-sm">{transaction.transaction_number}</TableCell>
-                        <TableCell className="font-medium">{transaction.product}</TableCell>
-                        <TableCell>{transaction.warehouse}</TableCell>
-                        <TableCell>
-                          <span className={transaction.quantity_change > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-                            {transaction.quantity_change > 0 ? '+' : ''}{transaction.quantity_change}
-                          </span>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(transaction.status)}</TableCell>
-                        <TableCell className="text-sm text-gray-600">
-                          {new Date(transaction.transaction_timestamp).toLocaleString()}
+                    {transactionsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex items-center justify-center">
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Loading transactions...
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      transactions.map((transaction) => (
+                        <TableRow key={transaction.transaction_id}>
+                          <TableCell>{getTransactionIcon(transaction.transaction_type)}</TableCell>
+                          <TableCell className="font-mono text-sm">{transaction.transaction_number}</TableCell>
+                          <TableCell className="font-medium">{transaction.product}</TableCell>
+                          <TableCell>{transaction.warehouse}</TableCell>
+                          <TableCell>
+                            <span className={transaction.quantity_change > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                              {transaction.quantity_change > 0 ? '+' : ''}{transaction.quantity_change}
+                            </span>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(transaction.status)}</TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {new Date(transaction.transaction_timestamp).toLocaleString()}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
+                <Pagination
+                  pagination={transactionsPagination}
+                  onPageChange={handleTransactionsPageChange}
+                  showPageSize={true}
+                  pageSizeOptions={[10, 25, 50, 100]}
+                />
               </CardContent>
             </Card>
           </TabsContent>

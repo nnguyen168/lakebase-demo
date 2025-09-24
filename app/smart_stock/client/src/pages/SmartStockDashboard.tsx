@@ -12,10 +12,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import Pagination, { PaginationMeta } from '@/components/ui/pagination';
 import {
   AlertTriangle, Package, TrendingUp, Clock, Truck,
   CheckCircle, Factory, ArrowUp, ArrowDown,
-  Activity, ShoppingCart
+  Activity, ShoppingCart, Loader2
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client/client';
 import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse } from '@/fastapi_client';
@@ -58,9 +59,25 @@ const SmartStockDashboard: React.FC = () => {
   const [warehouses, setWarehouses] = useState<WarehouseData[]>([]);
   const [forecast, setForecast] = useState<InventoryForecastResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [forecastLoading, setForecastLoading] = useState(false);
   const [transactionKpi, setTransactionKpi] = useState<TransactionManagementKPI | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  
+  // Pagination state
+  const [transactionsPagination, setTransactionsPagination] = useState<PaginationMeta>({
+    total: 0,
+    limit: 20,
+    offset: 0,
+    has_next: false,
+    has_prev: false
+  });
+  const [forecastPagination, setForecastPagination] = useState<PaginationMeta>({
+    total: 0,
+    limit: 20,
+    offset: 0,
+    has_next: false,
+    has_prev: false
+  });
   const [forecastModalOpen, setForecastModalOpen] = useState(false);
   const [selectedForecastItem, setSelectedForecastItem] = useState<InventoryForecastResponse | null>(null);
   const [createOrderModalOpen, setCreateOrderModalOpen] = useState(false);
@@ -73,53 +90,109 @@ const SmartStockDashboard: React.FC = () => {
   }, []);
 
   const loadDashboardData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
+      await Promise.all([
+        loadTransactions(transactionsPagination.offset, transactionsPagination.limit),
+        loadForecast(forecastPagination.offset, forecastPagination.limit),
+        loadKpis()
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      // Load transactions
-      const transactionsResponse = await apiClient.getTransactions();
+  const loadTransactions = async (offset: number = 0, limit: number = 20) => {
+    try {
+      setTransactionsLoading(true);
+
+      // Load transactions with pagination
+      const transactionsResponse = await apiClient.getTransactions(
+        undefined, // status
+        undefined, // warehouseId
+        undefined, // transactionType
+        limit,
+        offset
+      );
+      
       if (transactionsResponse) {
-        setTransactions(transactionsResponse);
+        const transactions = transactionsResponse.items;
+        setTransactions(transactions);
+        setTransactionsPagination(transactionsResponse.pagination);
 
-        // Process warehouse data from transactions
-        const warehouseMap = new Map<string, WarehouseData>();
-        const productsByWarehouse = new Map<string, Set<string>>();
+        // Only process warehouse data on initial load or when loading first page
+        if (offset === 0) {
+          // Process warehouse data from transactions
+          const warehouseMap = new Map<string, WarehouseData>();
+          const productsByWarehouse = new Map<string, Set<string>>();
 
-        transactionsResponse.forEach((t: TransactionResponse) => {
-          if (!warehouseMap.has(t.warehouse)) {
-            warehouseMap.set(t.warehouse, {
-              name: t.warehouse,
-              location: getWarehouseLocation(t.warehouse),
-              transactionCount: 0,
-              inboundUnits: 0,
-              salesUnits: 0,
-              capacityUsed: Math.floor(Math.random() * 35) + 45, // Simulated
-              lastAudit: getLastAudit(t.warehouse),
-              activeProducts: 0
-            });
-            productsByWarehouse.set(t.warehouse, new Set());
-          }
+          transactions.forEach((t: TransactionResponse) => {
+            if (!warehouseMap.has(t.warehouse)) {
+              warehouseMap.set(t.warehouse, {
+                name: t.warehouse,
+                location: getWarehouseLocation(t.warehouse),
+                transactionCount: 0,
+                inboundUnits: 0,
+                salesUnits: 0,
+                capacityUsed: Math.floor(Math.random() * 35) + 45, // Simulated
+                lastAudit: getLastAudit(t.warehouse),
+                activeProducts: 0
+              });
+              productsByWarehouse.set(t.warehouse, new Set());
+            }
 
-          const wh = warehouseMap.get(t.warehouse)!;
-          wh.transactionCount++;
+            const wh = warehouseMap.get(t.warehouse)!;
+            wh.transactionCount++;
 
-          if (t.transaction_type === 'inbound') {
-            wh.inboundUnits += Math.abs(t.quantity_change);
-          } else if (t.transaction_type === 'sale') {
-            wh.salesUnits += Math.abs(t.quantity_change);
-          }
+            if (t.transaction_type === 'inbound') {
+              wh.inboundUnits += Math.abs(t.quantity_change);
+            } else if (t.transaction_type === 'sale') {
+              wh.salesUnits += Math.abs(t.quantity_change);
+            }
 
-          productsByWarehouse.get(t.warehouse)!.add(t.product);
-        });
+            productsByWarehouse.get(t.warehouse)!.add(t.product);
+          });
 
-        // Update active products count
-        warehouseMap.forEach((wh, name) => {
-          wh.activeProducts = productsByWarehouse.get(name)?.size || 0;
-        });
+          // Update active products count
+          warehouseMap.forEach((wh, name) => {
+            wh.activeProducts = productsByWarehouse.get(name)?.size || 0;
+          });
 
-        setWarehouses(Array.from(warehouseMap.values()));
+          setWarehouses(Array.from(warehouseMap.values()));
+        }
       }
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  };
 
+  const loadForecast = async (offset: number = 0, limit: number = 20) => {
+    try {
+      setForecastLoading(true);
+      
+      // Load forecast data with pagination
+      const forecastResponse = await apiClient.getInventoryForecast(
+        undefined, // warehouseId
+        undefined, // status
+        limit,
+        offset
+      );
+      
+      if (forecastResponse) {
+        setForecast(forecastResponse.items);
+        setForecastPagination(forecastResponse.pagination);
+      }
+    } catch (error) {
+      console.error('Error loading forecast:', error);
+    } finally {
+      setForecastLoading(false);
+    }
+  };
+
+  const loadKpis = async () => {
+    try {
       // Load KPIs
       const kpiResponse = await apiClient.getTransactionKpi();
       if (kpiResponse) {
@@ -138,16 +211,8 @@ const SmartStockDashboard: React.FC = () => {
           }));
         }
       }
-
-      // Load forecast data
-      const forecastResponse = await apiClient.getInventoryForecast();
-      if (forecastResponse) {
-        setForecast(forecastResponse);
-      }
     } catch (error) {
-      console.error('Error loading dashboard:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error loading KPIs:', error);
     }
   };
 
@@ -215,6 +280,15 @@ const SmartStockDashboard: React.FC = () => {
   const handleOrderCreated = () => {
     // Refresh dashboard data after order creation
     loadDashboardData();
+  };
+
+  // Pagination handlers
+  const handleTransactionsPageChange = (offset: number, limit: number) => {
+    loadTransactions(offset, limit);
+  };
+
+  const handleForecastPageChange = (offset: number, limit: number) => {
+    loadForecast(offset, limit);
   };
 
   const handleOrderSuccess = (orderData: any) => {
@@ -406,70 +480,49 @@ const SmartStockDashboard: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {transactions.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((transaction) => (
-                      <TableRow key={transaction.transaction_id}>
-                        <TableCell>{getTransactionIcon(transaction.transaction_type)}</TableCell>
-                        <TableCell className="font-mono text-sm">{transaction.transaction_number}</TableCell>
-                        <TableCell className="font-medium">{transaction.product}</TableCell>
-                        <TableCell>{transaction.warehouse}</TableCell>
-                        <TableCell>
-                          <span className={`font-medium ${
-                            transaction.quantity_change > 0 ? 'text-green-600' : 'text-red-600'
-                          }`}>
-                            {transaction.quantity_change > 0 ? '+' : ''}{transaction.quantity_change}
-                          </span>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(transaction.status)}</TableCell>
-                        <TableCell className="text-sm text-gray-600">
-                          {new Date(transaction.transaction_timestamp).toLocaleDateString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                    {transactionsLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                          <div className="flex items-center justify-center">
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Loading transactions...
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      transactions.map((transaction) => (
+                        <TableRow key={transaction.transaction_id}>
+                          <TableCell>{getTransactionIcon(transaction.transaction_type)}</TableCell>
+                          <TableCell className="font-mono text-sm">{transaction.transaction_number}</TableCell>
+                          <TableCell className="font-medium">{transaction.product}</TableCell>
+                          <TableCell>{transaction.warehouse}</TableCell>
+                          <TableCell>
+                            <span className={`font-medium ${
+                              transaction.quantity_change > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {transaction.quantity_change > 0 ? '+' : ''}{transaction.quantity_change}
+                            </span>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(transaction.status)}</TableCell>
+                          <TableCell className="text-sm text-gray-600">
+                            {new Date(transaction.transaction_timestamp).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
-                {transactions.length > itemsPerPage && (
-                  <div className="flex items-center justify-between mt-4 px-2">
-                    <div className="text-sm text-gray-500">
-                      Showing {Math.min((currentPage - 1) * itemsPerPage + 1, transactions.length)}-{Math.min(currentPage * itemsPerPage, transactions.length)} of {transactions.length} transactions
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                        className="px-3 py-1 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                      >
-                        Previous
-                      </button>
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: Math.ceil(transactions.length / itemsPerPage) }, (_, i) => i + 1).map(page => (
-                          <button
-                            key={page}
-                            onClick={() => setCurrentPage(page)}
-                            className={`px-2 py-1 text-sm rounded-md ${
-                              page === currentPage
-                                ? 'bg-blue-500 text-white'
-                                : 'hover:bg-gray-50'
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.min(Math.ceil(transactions.length / itemsPerPage), prev + 1))}
-                        disabled={currentPage >= Math.ceil(transactions.length / itemsPerPage)}
-                        className="px-3 py-1 text-sm border rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                      >
-                        Next
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <Pagination
+                  pagination={transactionsPagination}
+                  onPageChange={handleTransactionsPageChange}
+                  showPageSize={true}
+                  pageSizeOptions={[10, 20, 50, 100]}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -548,7 +601,8 @@ const SmartStockDashboard: React.FC = () => {
                     </AlertDescription>
                   </Alert>
                 ) : (
-                  <Table>
+                  <>
+                    <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Product</TableHead>
@@ -562,72 +616,90 @@ const SmartStockDashboard: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {forecast.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{item.item_name}</TableCell>
-                          <TableCell className="font-mono text-sm">{item.item_id}</TableCell>
-                          <TableCell>{item.stock.toLocaleString()}</TableCell>
-                          <TableCell>{item.forecast_30_days.toLocaleString()}</TableCell>
-                          <TableCell>
-                            {(() => {
-                              const statusStyle = getInventoryStatusStyle(item.status);
-                              const StatusIcon = statusStyle.icon;
-                              return (
-                                <Badge 
-                                  variant={statusStyle.variant}
-                                  className={`${statusStyle.className} flex items-center gap-1 w-fit`}
-                                >
-                                  <StatusIcon className="h-3 w-3" />
-                                  {formatStatusText(item.status)}
-                                </Badge>
-                              );
-                            })()}
-                          </TableCell>
-                          <TableCell>
-                            <span className={`font-medium ${
-                              item.action === 'Urgent Reorder' ? 'text-red-600' :
-                              item.action === 'Reorder Now' ? 'text-orange-600' :
-                              item.action === 'Monitor' ? 'text-amber-600' :
-                              item.action === 'Resolved' ? 'text-blue-600' :
-                              item.action === 'No Action' ? 'text-emerald-600' :
-                              'text-slate-600'
-                            }`}>
-                              {item.action}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <button
-                              onClick={() => handleViewForecast(item)}
-                              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors duration-200 flex items-center gap-1"
-                            >
-                              <Activity className="w-3 h-3" />
-                              View Chart
-                            </button>
-                          </TableCell>
-                          <TableCell>
-                            <button
-                              onClick={() => handleCreateOrder(item)}
-                              className={`px-3 py-1 text-sm rounded-md transition-colors duration-200 flex items-center gap-1 ${
-                                item.status === 'in_stock' || item.status === 'resolved'
-                                  ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
-                                  : 'bg-green-100 text-green-700 hover:bg-green-200'
-                              }`}
-                              disabled={item.status === 'in_stock' || item.status === 'resolved'}
-                              title={
-                                item.status === 'in_stock' ? 'Stock is sufficient' :
-                                item.status === 'resolved' ? 'Order already created for this recommendation' :
-                                'Create reorder based on this recommendation'
-                              }
-                            >
-                              <ShoppingCart className="w-3 h-3" />
-                              {item.status === 'in_stock' ? 'In Stock' : 
-                               item.status === 'resolved' ? 'Resolved' : 'Reorder'}
-                            </button>
+                      {forecastLoading ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="h-24 text-center">
+                            <div className="flex items-center justify-center">
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              Loading forecast...
+                            </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        forecast.map((item, index) => (
+                          <TableRow key={item.forecast_id || index}>
+                            <TableCell className="font-medium">{item.item_name}</TableCell>
+                            <TableCell className="font-mono text-sm">{item.item_id}</TableCell>
+                            <TableCell>{item.stock.toLocaleString()}</TableCell>
+                            <TableCell>{item.forecast_30_days.toLocaleString()}</TableCell>
+                            <TableCell>
+                              {(() => {
+                                const statusStyle = getInventoryStatusStyle(item.status);
+                                const StatusIcon = statusStyle.icon;
+                                return (
+                                  <Badge 
+                                    variant={statusStyle.variant}
+                                    className={`${statusStyle.className} flex items-center gap-1 w-fit`}
+                                  >
+                                    <StatusIcon className="h-3 w-3" />
+                                    {formatStatusText(item.status)}
+                                  </Badge>
+                                );
+                              })()}
+                            </TableCell>
+                            <TableCell>
+                              <span className={`font-medium ${
+                                item.action === 'Urgent Reorder' ? 'text-red-600' :
+                                item.action === 'Reorder Now' ? 'text-orange-600' :
+                                item.action === 'Monitor' ? 'text-amber-600' :
+                                item.action === 'Resolved' ? 'text-blue-600' :
+                                item.action === 'No Action' ? 'text-emerald-600' :
+                                'text-slate-600'
+                              }`}>
+                                {item.action}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <button
+                                onClick={() => handleViewForecast(item)}
+                                className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors duration-200 flex items-center gap-1"
+                              >
+                                <Activity className="w-3 h-3" />
+                                View Chart
+                              </button>
+                            </TableCell>
+                            <TableCell>
+                              <button
+                                onClick={() => handleCreateOrder(item)}
+                                className={`px-3 py-1 text-sm rounded-md transition-colors duration-200 flex items-center gap-1 ${
+                                  item.status === 'in_stock' || item.status === 'resolved'
+                                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                                    : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                }`}
+                                disabled={item.status === 'in_stock' || item.status === 'resolved'}
+                                title={
+                                  item.status === 'in_stock' ? 'Stock is sufficient' :
+                                  item.status === 'resolved' ? 'Order already created for this recommendation' :
+                                  'Create reorder based on this recommendation'
+                                }
+                              >
+                                <ShoppingCart className="w-3 h-3" />
+                                {item.status === 'in_stock' ? 'In Stock' : 
+                                 item.status === 'resolved' ? 'Resolved' : 'Reorder'}
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
+                    <Pagination
+                      pagination={forecastPagination}
+                      onPageChange={handleForecastPageChange}
+                      showPageSize={true}
+                      pageSizeOptions={[10, 20, 50, 100]}
+                    />
+                  </>
                 )}
               </CardContent>
             </Card>

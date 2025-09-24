@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException, Query
 from decimal import Decimal
 
 from ..models import (
-    Product, ProductCreate, ProductUpdate
+    Product, ProductCreate, ProductUpdate,
+    PaginatedResponse, PaginationMeta
 )
 # Use database selector (automatically chooses mock or PostgreSQL)
 from ..db_selector import db
@@ -13,16 +14,35 @@ from ..db_selector import db
 router = APIRouter(prefix="/products", tags=["products"])
 
 
-@router.get("/", response_model=List[Product])
+@router.get("/", response_model=PaginatedResponse[Product])
 async def get_products(
     category: Optional[str] = Query(None, description="Filter by product category"),
     search: Optional[str] = Query(None, description="Search in product name or SKU"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of products to return"),
     offset: int = Query(0, ge=0, description="Number of products to skip")
 ):
-    """Get all products with optional filters."""
+    """Get all products with optional filters and pagination metadata."""
     try:
-        query = """
+        # Build base query for filtering
+        base_query = "FROM products WHERE 1=1"
+        params = []
+        
+        if category:
+            base_query += " AND category = %s"
+            params.append(category)
+            
+        if search:
+            base_query += " AND (name ILIKE %s OR sku ILIKE %s)"
+            search_param = f"%{search}%"
+            params.extend([search_param, search_param])
+        
+        # Get total count
+        count_query = "SELECT COUNT(*) as total " + base_query
+        count_result = db.execute_query(count_query, tuple(params) if params else None)
+        total = count_result[0]['total'] if count_result else 0
+        
+        # Get paginated results
+        data_query = """
             SELECT 
                 product_id,
                 name,
@@ -34,32 +54,29 @@ async def get_products(
                 reorder_level,
                 created_at,
                 updated_at
-            FROM products
-            WHERE 1=1
-        """
+        """ + base_query + " ORDER BY name LIMIT %s OFFSET %s"
         
-        params = []
-        
-        if category:
-            query += " AND category = %s"
-            params.append(category)
-            
-        if search:
-            query += " AND (name ILIKE %s OR sku ILIKE %s)"
-            search_param = f"%{search}%"
-            params.extend([search_param, search_param])
-        
-        query += " ORDER BY name"
-        query += f" LIMIT {limit} OFFSET {offset}"
-        
-        products = db.execute_query(query, tuple(params) if params else None)
+        data_params = params + [limit, offset]
+        products = db.execute_query(data_query, tuple(data_params))
         
         # Convert price to Decimal for proper handling
         for product in products:
             if product.get('price'):
                 product['price'] = Decimal(str(product['price']))
         
-        return products
+        # Create pagination metadata
+        pagination = PaginationMeta(
+            total=total,
+            limit=limit,
+            offset=offset,
+            has_next=offset + limit < total,
+            has_prev=offset > 0
+        )
+
+        return PaginatedResponse(
+            items=products,
+            pagination=pagination
+        )
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch products: {str(e)}")

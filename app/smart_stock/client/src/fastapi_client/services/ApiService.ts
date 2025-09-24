@@ -4,7 +4,6 @@
 /* eslint-disable */
 import type { ForecastStatus } from '../models/ForecastStatus';
 import type { InventoryForecast } from '../models/InventoryForecast';
-import type { InventoryForecastResponse } from '../models/InventoryForecastResponse';
 import type { InventoryForecastUpdate } from '../models/InventoryForecastUpdate';
 import type { InventoryTransaction } from '../models/InventoryTransaction';
 import type { InventoryTransactionCreate } from '../models/InventoryTransactionCreate';
@@ -13,12 +12,14 @@ import type { Order } from '../models/Order';
 import type { OrderCreate } from '../models/OrderCreate';
 import type { OrderStatus } from '../models/OrderStatus';
 import type { OrderUpdate } from '../models/OrderUpdate';
+import type { PaginatedResponse_InventoryForecastResponse_ } from '../models/PaginatedResponse_InventoryForecastResponse_';
+import type { PaginatedResponse_Product_ } from '../models/PaginatedResponse_Product_';
+import type { PaginatedResponse_TransactionResponse_ } from '../models/PaginatedResponse_TransactionResponse_';
 import type { Product } from '../models/Product';
 import type { ProductCreate } from '../models/ProductCreate';
 import type { ProductUpdate } from '../models/ProductUpdate';
 import type { StockManagementAlertKPI } from '../models/StockManagementAlertKPI';
 import type { TransactionManagementKPI } from '../models/TransactionManagementKPI';
-import type { TransactionResponse } from '../models/TransactionResponse';
 import type { TransactionStatus } from '../models/TransactionStatus';
 import type { TransactionType } from '../models/TransactionType';
 import type { UserInfo } from '../models/UserInfo';
@@ -53,13 +54,13 @@ export class ApiService {
     }
     /**
      * Get Transactions
-     * Get list of inventory transactions with optional filters.
+     * Get list of inventory transactions with optional filters and pagination metadata.
      * @param status Filter by transaction status
      * @param warehouseId Filter by warehouse ID
      * @param transactionType Filter by transaction type
      * @param limit Maximum number of transactions to return
      * @param offset Number of transactions to skip
-     * @returns TransactionResponse Successful Response
+     * @returns PaginatedResponse_TransactionResponse_ Successful Response
      * @throws ApiError
      */
     public static getTransactionsApiTransactionsGet(
@@ -68,7 +69,7 @@ export class ApiService {
         transactionType?: (TransactionType | null),
         limit: number = 100,
         offset?: number,
-    ): CancelablePromise<Array<TransactionResponse>> {
+    ): CancelablePromise<PaginatedResponse_TransactionResponse_> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/transactions/',
@@ -185,12 +186,12 @@ export class ApiService {
     }
     /**
      * Get Inventory Forecast
-     * Get inventory forecast with optional filters.
+     * Get inventory forecast with optional filters and pagination metadata.
      * @param warehouseId Filter by warehouse ID
      * @param status Filter by forecast status
      * @param limit Maximum number of items to return
      * @param offset Number of items to skip
-     * @returns InventoryForecastResponse Successful Response
+     * @returns PaginatedResponse_InventoryForecastResponse_ Successful Response
      * @throws ApiError
      */
     public static getInventoryForecastApiInventoryForecastGet(
@@ -198,7 +199,7 @@ export class ApiService {
         status?: (ForecastStatus | null),
         limit: number = 100,
         offset?: number,
-    ): CancelablePromise<Array<InventoryForecastResponse>> {
+    ): CancelablePromise<PaginatedResponse_InventoryForecastResponse_> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/inventory/forecast',
@@ -252,12 +253,12 @@ export class ApiService {
     }
     /**
      * Get Products
-     * Get all products with optional filters.
+     * Get all products with optional filters and pagination metadata.
      * @param category Filter by product category
      * @param search Search in product name or SKU
      * @param limit Maximum number of products to return
      * @param offset Number of products to skip
-     * @returns Product Successful Response
+     * @returns PaginatedResponse_Product_ Successful Response
      * @throws ApiError
      */
     public static getProductsApiProductsGet(
@@ -265,7 +266,7 @@ export class ApiService {
         search?: (string | null),
         limit: number = 100,
         offset?: number,
-    ): CancelablePromise<Array<Product>> {
+    ): CancelablePromise<PaginatedResponse_Product_> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/products/',

@@ -1,10 +1,13 @@
 """Database models for inventory management system."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Generic, TypeVar, List
 from decimal import Decimal
 from pydantic import BaseModel
 from enum import Enum
+
+# Generic type for paginated responses
+T = TypeVar('T')
 
 
 class TransactionStatus(str, Enum):
@@ -296,3 +299,18 @@ class StockManagementAlertKPI(BaseModel):
     out_of_stock_items: int
     reorder_needed_items: int
     total_alerts: int
+
+
+class PaginationMeta(BaseModel):
+    """Pagination metadata."""
+    total: int
+    limit: int
+    offset: int
+    has_next: bool
+    has_prev: bool
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Generic paginated response wrapper."""
+    items: List[T]
+    pagination: PaginationMeta

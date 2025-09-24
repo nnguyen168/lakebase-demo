@@ -161,7 +161,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
       // Fetch products using apiClient
       try {
         const productsData = await apiClient.getProducts();
-        setProducts(productsData);
+        setProducts(productsData.items);
       } catch (apiError) {
         console.warn('API client failed, trying fallback:', apiError);
         // Fallback to debug endpoint
