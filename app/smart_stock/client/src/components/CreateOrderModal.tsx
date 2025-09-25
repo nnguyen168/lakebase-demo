@@ -33,9 +33,16 @@ interface Product {
   reorder_level?: number;
 }
 
+interface Warehouse {
+  warehouse_id: number;
+  name: string;
+  location: string;
+}
+
 interface CreateOrderFormData {
   product_id: number | null;
   quantity: number;
+  warehouse_id: number | null;
   requested_by: string;
   notes: string;
 }
@@ -73,11 +80,13 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
   const [formData, setFormData] = useState<CreateOrderFormData>({
     product_id: null,
     quantity: 1,
+    warehouse_id: null,
     requested_by: '',
     notes: '',
   });
   
   const [products, setProducts] = useState<Product[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -130,6 +139,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
         setFormData(prev => ({
           ...prev,
           product_id: matchingProduct.product_id,
+          warehouse_id: selectedItem.warehouse_id,
           quantity: suggestedQuantity,
           notes: `Reorder recommendation based on forecast: ${selectedItem.action}. Current stock: ${selectedItem.stock}, 30-day forecast: ${selectedItem.forecast_30_days}`
         }));
@@ -141,6 +151,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
     setFormData({
       product_id: null,
       quantity: 1,
+      warehouse_id: null,
       requested_by: userName, // Pre-fill with user name
       notes: '',
     });
@@ -191,6 +202,15 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
           throw new Error('Failed to fetch products');
         }
       }
+      
+      // Load warehouses (hardcoded for now since there's no warehouse API)
+      const hardcodedWarehouses: Warehouse[] = [
+        { warehouse_id: 1, name: "Lyon Main Warehouse", location: "Zone Industrielle, 69007 Lyon, France" },
+        { warehouse_id: 2, name: "Hamburg Distribution Center", location: "Hafencity, 20457 Hamburg, Germany" },
+        { warehouse_id: 3, name: "Milan Assembly Hub", location: "Via Industriale, 20090 Segrate MI, Italy" }
+      ];
+      setWarehouses(hardcodedWarehouses);
+      
     } catch (err) {
       setError('Failed to load products from database');
       console.error('Error fetching products:', err);
@@ -202,6 +222,10 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
     
     if (!formData.product_id) {
       errors.product_id = 'Product is required';
+    }
+    
+    if (!formData.warehouse_id) {
+      errors.warehouse_id = 'Warehouse is required';
     }
     
     if (!formData.quantity || formData.quantity < 1) {
@@ -235,6 +259,7 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
         body: JSON.stringify({
           product_id: formData.product_id,
           quantity: formData.quantity,
+          warehouse_id: formData.warehouse_id,
           requested_by: formData.requested_by,
           status: 'pending',
           notes: formData.notes || null,
@@ -336,6 +361,32 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
             )}
           </div>
 
+          {/* Warehouse Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="warehouse">Warehouse *</Label>
+            <Select
+              value={formData.warehouse_id?.toString() || ''}
+              onValueChange={(value) => setFormData({ ...formData, warehouse_id: parseInt(value) })}
+              disabled={loading}
+            >
+              <SelectTrigger className={`h-16 ${validationErrors.warehouse_id ? 'border-red-500' : ''}`}>
+                <SelectValue placeholder="Select a warehouse" />
+              </SelectTrigger>
+              <SelectContent>
+                {warehouses.map((warehouse) => (
+                  <SelectItem key={warehouse.warehouse_id} value={warehouse.warehouse_id.toString()} className="h-16 p-0">
+                    <div className="flex flex-col space-y-1 w-full py-3 px-3 text-left">
+                      <span className="font-medium text-sm text-left">{warehouse.name}</span>
+                      <span className="text-xs text-muted-foreground text-left">{warehouse.location}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {validationErrors.warehouse_id && (
+              <p className="text-sm text-red-500">{validationErrors.warehouse_id}</p>
+            )}
+          </div>
 
           {/* Quantity */}
           <div className="space-y-2">

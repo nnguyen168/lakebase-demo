@@ -2,7 +2,7 @@
 
 import random
 import string
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -96,9 +96,8 @@ async def create_order(order: OrderCreate):
         # Create a corresponding inventory transaction with "processing" status
         # Work around sequence synchronization issues by manually finding next ID
         try:
-            # For orders, we assume warehouse_id = 1 (default warehouse)
-            # if not specified
-            warehouse_id = 1
+            # Use the warehouse_id from the order
+            warehouse_id = order.warehouse_id
 
             transaction_notes = (
                 f"Order {order_number}: {order.notes}"
@@ -135,6 +134,30 @@ async def create_order(order: OrderCreate):
                         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             """
 
+            # Calculate delivery date based on urgency (3-7 days)
+            delivery_days = 3  # Default for urgent orders
+            if order.forecast_id:
+                # Get forecast status to determine urgency
+                try:
+                    forecast_query = """
+                        SELECT 
+                            CASE
+                                WHEN current_stock = 0 THEN 3  -- Urgent: 3 days
+                                WHEN current_stock < reorder_point THEN 5  -- Normal: 5 days
+                                ELSE 7  -- Low priority: 7 days
+                            END as delivery_days
+                        FROM inventory_forecast 
+                        WHERE forecast_id = %s
+                    """
+                    forecast_result = db.execute_query(forecast_query, (order.forecast_id,))
+                    if forecast_result:
+                        delivery_days = forecast_result[0]['delivery_days']
+                except Exception:
+                    delivery_days = 5  # Default fallback
+            
+            # Calculate expected delivery date
+            expected_delivery = datetime.now() + timedelta(days=delivery_days)
+            
             db.execute_update(
                 insert_transaction_query,
                 (
@@ -148,9 +171,11 @@ async def create_order(order: OrderCreate):
                     transaction_notes,
                 ),
             )
+            
             print(
                 f"✅ Created transaction {unique_transaction_number} "
-                f"(ID: {next_transaction_id}) for order {order_number}"
+                f"(ID: {next_transaction_id}) for order {order_number} - "
+                f"Expected delivery: {expected_delivery.strftime('%Y-%m-%d')} ({delivery_days} days)"
             )
 
         except Exception as transaction_error:
@@ -178,10 +203,11 @@ async def create_order(order: OrderCreate):
                             transaction_notes,
                         ),
                     )
+                    
                     print(
                         f"✅ Created transaction {unique_transaction_number} "
                         f"(ID: {alternative_id}) for order {order_number} "
-                        "on retry"
+                        f"on retry - Expected delivery: {expected_delivery.strftime('%Y-%m-%d')} ({delivery_days} days)"
                     )
                 except Exception as retry_error:
                     print(
@@ -202,6 +228,7 @@ async def create_order(order: OrderCreate):
             order_number=order_number,
             product_id=order.product_id,
             quantity=order.quantity,
+            warehouse_id=order.warehouse_id,
             requested_by=order.requested_by,
             status=OrderStatus.PENDING,
             notes=order.notes,

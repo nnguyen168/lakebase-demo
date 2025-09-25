@@ -41,6 +41,7 @@ async def get_inventory_forecast(
         base_query = """
             FROM inventory_forecast f
             JOIN products p ON f.product_id = p.product_id
+            JOIN warehouses w ON f.warehouse_id = w.warehouse_id
             WHERE 1=1
         """
 
@@ -67,6 +68,9 @@ async def get_inventory_forecast(
                 p.name as item_name,
                 f.current_stock as stock,
                 f.forecast_30_days,
+                f.warehouse_id,
+                w.name as warehouse_name,
+                w.location as warehouse_location,
                 CASE
                     WHEN f.status = 'resolved' THEN 'resolved'
                     WHEN f.current_stock = 0 THEN 'out_of_stock'

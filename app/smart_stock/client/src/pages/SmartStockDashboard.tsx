@@ -102,30 +102,7 @@ const SmartStockDashboard: React.FC = () => {
     loadAlertCounts();
   }, [forecastSort.key, forecastSort.direction]);
 
-  const sortForecastItems = (items: InventoryForecastResponse[], sortState: ForecastSortState) => {
-    const sorted = [...items];
-    sorted.sort((a, b) => {
-      let comparison = 0;
-      switch (sortState.key) {
-        case 'severity':
-          comparison = getSeverityRank(a.status) - getSeverityRank(b.status);
-          break;
-        case 'stock':
-          comparison = a.stock - b.stock;
-          break;
-        case 'forecast':
-          comparison = a.forecast_30_days - b.forecast_30_days;
-          break;
-        case 'product':
-          comparison = a.item_name.localeCompare(b.item_name);
-          break;
-        default:
-          comparison = 0;
-      }
-      return sortState.direction === 'asc' ? comparison : -comparison;
-    });
-    return sorted;
-  };
+  // Removed sortForecastItems since we use server-side sorting
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -723,6 +700,7 @@ const SmartStockDashboard: React.FC = () => {
                           <div className="flex items-center">Product {getSortIcon('product')}</div>
                         </TableHead>
                         <TableHead>SKU</TableHead>
+                        <TableHead>Warehouse</TableHead>
                         <TableHead
                           className="cursor-pointer select-none"
                           onClick={() => handleForecastSort('stock')}
@@ -749,7 +727,7 @@ const SmartStockDashboard: React.FC = () => {
                     <TableBody>
                       {forecastLoading ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="h-24 text-center">
+                          <TableCell colSpan={9} className="h-24 text-center">
                             <div className="flex items-center justify-center">
                               <Loader2 className="h-4 w-4 animate-spin mr-2" />
                               Loading forecast...
@@ -761,6 +739,12 @@ const SmartStockDashboard: React.FC = () => {
                           <TableRow key={item.forecast_id || index}>
                             <TableCell className="font-medium">{item.item_name}</TableCell>
                             <TableCell className="font-mono text-sm">{item.item_id}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium">{item.warehouse_name}</span>
+                                <span className="text-xs text-gray-500">{item.warehouse_location}</span>
+                              </div>
+                            </TableCell>
                             <TableCell>{item.stock.toLocaleString()}</TableCell>
                             <TableCell>{item.forecast_30_days.toLocaleString()}</TableCell>
                             <TableCell>
@@ -861,6 +845,48 @@ const SmartStockDashboard: React.FC = () => {
         onClose={closeOrderSuccessModal}
         onRefreshData={handleOrderCreated}
         orderData={successOrderData}
+        onViewForecast={async () => {
+          console.log('🔍 Button clicked! Looking for forecast item with ID:', successOrderData?.forecast_id);
+          
+          // First, try to find the item in the current forecast data
+          let forecastItem = forecast.find(item => 
+            item.forecast_id === successOrderData?.forecast_id
+          );
+          
+          console.log('📊 Found in current data:', forecastItem);
+          
+          if (!forecastItem) {
+            console.log('🔄 Not found in current page, fetching from API...');
+            
+            // If not found in current data, fetch it directly from the API
+            try {
+              const response = await apiClient.getInventoryForecast(
+                undefined, // warehouseId
+                undefined, // status  
+                500, // high limit to find the item
+                0 // offset
+              );
+              
+              if (response?.items) {
+                forecastItem = response.items.find(item => 
+                  item.forecast_id === successOrderData?.forecast_id
+                );
+                console.log('🔍 Found via API:', forecastItem);
+              }
+            } catch (error) {
+              console.error('❌ Error fetching forecast data:', error);
+            }
+          }
+          
+          if (forecastItem) {
+            console.log('✅ Opening forecast modal for:', forecastItem.item_name);
+            setSelectedForecastItem(forecastItem);
+            setForecastModalOpen(true);
+          } else {
+            console.log('❌ Could not find forecast item with ID:', successOrderData?.forecast_id);
+            alert(`Could not find forecast item with ID ${successOrderData?.forecast_id}. It may have been removed or is on a different page.`);
+          }
+        }}
       />
     </div>
   );

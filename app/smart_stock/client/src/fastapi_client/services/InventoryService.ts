@@ -18,6 +18,8 @@ export class InventoryService {
      * @param status Filter by forecast status
      * @param limit Maximum number of items to return
      * @param offset Number of items to skip
+     * @param sortBy Sort key
+     * @param sortOrder Sort order: asc or desc
      * @returns PaginatedResponse_InventoryForecastResponse_ Successful Response
      * @throws ApiError
      */
@@ -25,7 +27,7 @@ export class InventoryService {
         warehouseId?: (number | null),
         status?: (ForecastStatus | null),
         limit: number = 100,
-        offset: number = 0,
+        offset?: number,
         sortBy: string = 'severity',
         sortOrder: string = 'asc',
     ): CancelablePromise<PaginatedResponse_InventoryForecastResponse_> {

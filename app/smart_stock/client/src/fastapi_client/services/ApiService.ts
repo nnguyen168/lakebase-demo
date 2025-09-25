@@ -191,6 +191,8 @@ export class ApiService {
      * @param status Filter by forecast status
      * @param limit Maximum number of items to return
      * @param offset Number of items to skip
+     * @param sortBy Sort key
+     * @param sortOrder Sort order: asc or desc
      * @returns PaginatedResponse_InventoryForecastResponse_ Successful Response
      * @throws ApiError
      */
@@ -199,6 +201,8 @@ export class ApiService {
         status?: (ForecastStatus | null),
         limit: number = 100,
         offset?: number,
+        sortBy: string = 'severity',
+        sortOrder: string = 'asc',
     ): CancelablePromise<PaginatedResponse_InventoryForecastResponse_> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -208,6 +212,8 @@ export class ApiService {
                 'status': status,
                 'limit': limit,
                 'offset': offset,
+                'sort_by': sortBy,
+                'sort_order': sortOrder,
             },
             errors: {
                 422: `Validation Error`,

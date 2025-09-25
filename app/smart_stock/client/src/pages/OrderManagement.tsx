@@ -28,6 +28,7 @@ import OrderSuccessModal from '@/components/OrderSuccessModal';
 import EditOrderModal from '@/components/EditOrderModal';
 import ForecastModal from '@/components/ForecastModal';
 import { apiClient } from '@/fastapi_client/client';
+import { InventoryStatus } from '@/fastapi_client';
 
 interface OrderData {
   order_id: number;
@@ -46,7 +47,10 @@ interface InventoryForecastData {
   item_name: string;
   stock: number;
   forecast_30_days: number;
-  status: string;
+  warehouse_id: number;
+  warehouse_name: string;
+  warehouse_location: string;
+  status: InventoryStatus;
   action: string;
 }
 
@@ -542,6 +546,64 @@ const OrderManagement: React.FC = () => {
         onClose={closeOrderSuccessModal}
         onRefreshData={handleOrderCreated}
         orderData={successOrderData}
+        onViewForecast={async () => {
+          console.log('🔍 [OrderManagement] Button clicked! Looking for forecast item with ID:', successOrderData?.forecast_id);
+          
+          // First, try to find the item in the current inventory data
+          let forecastItem = inventory.find(item => 
+            item.forecast_id === successOrderData?.forecast_id
+          );
+          
+          console.log('📊 [OrderManagement] Found in current data:', forecastItem);
+          
+          if (!forecastItem) {
+            console.log('🔄 [OrderManagement] Not found in current page, fetching from API...');
+            
+            // If not found in current data, fetch it directly from the API
+            try {
+              const response = await apiClient.getInventoryForecast(
+                undefined, // warehouseId
+                undefined, // status  
+                500, // high limit to find the item
+                0 // offset
+              );
+              
+              if (response?.items) {
+                const apiItem = response.items.find(item => 
+                  item.forecast_id === successOrderData?.forecast_id
+                );
+                console.log('🔍 [OrderManagement] Found via API:', apiItem);
+                
+                // Convert to our local interface format
+                if (apiItem) {
+                  forecastItem = {
+                    forecast_id: apiItem.forecast_id,
+                    item_id: apiItem.item_id,
+                    item_name: apiItem.item_name,
+                    stock: apiItem.stock,
+                    forecast_30_days: apiItem.forecast_30_days,
+                    warehouse_id: apiItem.warehouse_id,
+                    warehouse_name: apiItem.warehouse_name,
+                    warehouse_location: apiItem.warehouse_location,
+                    status: apiItem.status,
+                    action: apiItem.action
+                  };
+                }
+              }
+            } catch (error) {
+              console.error('❌ [OrderManagement] Error fetching forecast data:', error);
+            }
+          }
+          
+          if (forecastItem) {
+            console.log('✅ [OrderManagement] Opening forecast modal for:', forecastItem.item_name);
+            setSelectedInventoryItem(forecastItem);
+            setIsForecastModalOpen(true);
+          } else {
+            console.log('❌ [OrderManagement] Could not find forecast item with ID:', successOrderData?.forecast_id);
+            alert(`Could not find forecast item with ID ${successOrderData?.forecast_id}. It may have been removed or is on a different page.`);
+          }
+        }}
       />
       
       <EditOrderModal

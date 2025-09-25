@@ -222,6 +222,9 @@ class InventoryForecastResponse(BaseModel):
     item_name: str
     stock: int
     forecast_30_days: int
+    warehouse_id: int
+    warehouse_name: str
+    warehouse_location: str
     status: InventoryStatus
     action: str
 
@@ -243,6 +246,7 @@ class OrderBase(BaseModel):
     """Base order model."""
     product_id: int
     quantity: int
+    warehouse_id: int
     requested_by: str
     status: OrderStatus = OrderStatus.PENDING
     notes: Optional[str] = None
@@ -269,6 +273,7 @@ class OrderCreate(BaseModel):
     """Model for creating a new order."""
     product_id: int
     quantity: int
+    warehouse_id: int
     requested_by: str
     notes: Optional[str] = None
     forecast_id: Optional[int] = None  # Link to forecast recommendation

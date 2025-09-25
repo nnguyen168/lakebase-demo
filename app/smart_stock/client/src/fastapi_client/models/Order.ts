@@ -9,6 +9,7 @@ import type { OrderStatus } from './OrderStatus';
 export type Order = {
     product_id: number;
     quantity: number;
+    warehouse_id: number;
     requested_by: string;
     status?: OrderStatus;
     notes?: (string | null);

@@ -32,13 +32,15 @@ interface OrderSuccessModalProps {
   onClose: () => void;
   onRefreshData?: () => void;
   orderData: OrderData | null;
+  onViewForecast?: () => void;
 }
 
 const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ 
   isOpen, 
   onClose, 
   onRefreshData,
-  orderData 
+  orderData,
+  onViewForecast
 }) => {
   if (!orderData) return null;
 
@@ -170,6 +172,19 @@ const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
 
         <DialogFooter>
           <div className="flex gap-2 w-full">
+            {orderData.forecast_id && onViewForecast && (
+              <Button 
+                type="button" 
+                variant="default"
+                onClick={() => {
+                  onViewForecast();
+                  onClose(); // Close this modal when opening forecast
+                }}
+                className="flex-1"
+              >
+                View Updated Forecast
+              </Button>
+            )}
             <Button 
               type="button" 
               variant="outline" 

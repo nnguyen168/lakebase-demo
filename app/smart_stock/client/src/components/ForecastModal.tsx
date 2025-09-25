@@ -31,6 +31,7 @@ interface ForecastDataPoint {
   day: number;
   pastStock?: number;  // Stock level for past days
   forecastStock?: number;  // Stock level for future days
+  incomingOrder?: number;  // Expected incoming order delivery on this day
 }
 
 interface ForecastModalProps {
@@ -98,6 +99,25 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
     let futureStock = item.stock;
     const avgDailyDemand = item.forecast_30_days / 30;
     
+    // Simulate expected delivery for resolved items
+    let expectedDeliveryDay = null;
+    let expectedDeliveryQuantity = 0;
+    
+    if (item.status === 'resolved') {
+      // Calculate delivery timing based on urgency
+      const deliveryDays = item.stock === 0 ? 3 : item.stock < 20 ? 5 : 7;
+      expectedDeliveryDay = deliveryDays;
+      
+      // Estimate delivery quantity based on action
+      if (item.action === 'Urgent Reorder') {
+        expectedDeliveryQuantity = Math.max(50, item.forecast_30_days * 1.5);
+      } else if (item.action === 'Reorder Now') {
+        expectedDeliveryQuantity = Math.max(30, item.forecast_30_days);
+      } else {
+        expectedDeliveryQuantity = Math.max(20, item.forecast_30_days * 0.8);
+      }
+    }
+    
     for (let day = 1; day <= 30; day++) {
       const date = new Date(today);
       date.setDate(today.getDate() + day);
@@ -106,10 +126,18 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
       const dailyDemand = avgDailyDemand + (Math.random() - 0.5) * 1;
       futureStock = Math.max(0, futureStock - dailyDemand);
       
+      // Add expected delivery
+      let incomingOrder = undefined;
+      if (day === expectedDeliveryDay) {
+        futureStock += expectedDeliveryQuantity; // Boost stock when delivery arrives
+        incomingOrder = Math.round(futureStock);
+      }
+      
       data.push({
         date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         day: day,
         forecastStock: Math.round(futureStock),
+        incomingOrder: incomingOrder, // Renamed from expectedDelivery
       });
     }
     
@@ -251,10 +279,15 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
                       label={{ value: 'Stock Units', angle: -90, position: 'insideLeft' }}
                     />
                     <RechartsTooltip 
-                      formatter={(value, name) => [
-                        `${value} units`,
-                        name === 'pastStock' ? 'Historical Stock' : 'Forecast Stock'
-                      ]}
+                      formatter={(value, name) => {
+                        if (name === 'Incoming Order Delivery') {
+                          return ['Incoming Order Delivery'];
+                        }
+                        return [
+                          `${value} units`,
+                          name === 'pastStock' ? 'Historical Stock' : 'Forecast Stock'
+                        ];
+                      }}
                       labelFormatter={(date) => date}
                     />
                     
@@ -279,6 +312,23 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
                       dot={false}
                       connectNulls={false}
                       name="Forecast Stock"
+                    />
+                    
+                    {/* Incoming order delivery points (green) */}
+                    <Line
+                      type="monotone"
+                      dataKey="incomingOrder"
+                      stroke="#10b981"
+                      strokeWidth={0}
+                      dot={{ 
+                        fill: '#10b981', 
+                        stroke: '#059669', 
+                        strokeWidth: 3, 
+                        r: 8,
+                        fillOpacity: 0.8
+                      }}
+                      connectNulls={false}
+                      name="Incoming Order Delivery"
                     />
                     
                     {/* Today reference line */}

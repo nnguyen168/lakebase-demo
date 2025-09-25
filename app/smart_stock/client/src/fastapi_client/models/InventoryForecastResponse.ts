@@ -12,6 +12,9 @@ export type InventoryForecastResponse = {
     item_name: string;
     stock: number;
     forecast_30_days: number;
+    warehouse_id: number;
+    warehouse_name: string;
+    warehouse_location: string;
     status: InventoryStatus;
     action: string;
 };
