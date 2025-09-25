@@ -113,10 +113,24 @@ const CreateOrderModal: React.FC<CreateOrderModalProps> = ({
       );
       
       if (matchingProduct) {
+        // Calculate a reasonable order quantity based on the situation
+        let suggestedQuantity = 1;
+        
+        if (selectedItem.action === "Urgent Reorder" || selectedItem.stock === 0) {
+          // For urgent/out of stock: order enough for ~2 weeks of demand
+          suggestedQuantity = Math.max(10, Math.round(selectedItem.forecast_30_days / 2));
+        } else if (selectedItem.action === "Reorder Now") {
+          // For regular reorder: order enough for ~1 week of demand  
+          suggestedQuantity = Math.max(5, Math.round(selectedItem.forecast_30_days / 4));
+        } else {
+          // For monitoring/low stock: smaller quantity
+          suggestedQuantity = Math.max(3, Math.round(selectedItem.forecast_30_days / 6));
+        }
+        
         setFormData(prev => ({
           ...prev,
           product_id: matchingProduct.product_id,
-          quantity: Math.max(1, selectedItem.forecast_30_days || 1),
+          quantity: suggestedQuantity,
           notes: `Reorder recommendation based on forecast: ${selectedItem.action}. Current stock: ${selectedItem.stock}, 30-day forecast: ${selectedItem.forecast_30_days}`
         }));
       }
