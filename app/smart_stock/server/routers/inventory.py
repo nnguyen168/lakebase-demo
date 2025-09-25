@@ -36,32 +36,32 @@ async def get_inventory_forecast(
         if sort_by not in valid_sort_keys:
             sort_by = 'severity'
         sort_order = 'desc' if sort_order.lower() == 'desc' else 'asc'
-        
+
         # Build base query for filtering
         base_query = """
             FROM inventory_forecast f
             JOIN products p ON f.product_id = p.product_id
             WHERE 1=1
         """
-        
+
         params = []
-        
+
         if warehouse_id:
             base_query += " AND f.warehouse_id = %s"
             params.append(warehouse_id)
-        
+
         if status:
             base_query += " AND f.status = %s"
             params.append(status.value)
-        
+
         # Get total count
         count_query = "SELECT COUNT(*) as total " + base_query
         count_result = db.execute_query(count_query, params)
         total = count_result[0]['total'] if count_result else 0
-        
+
         # Get paginated results
         data_query = """
-            SELECT 
+            SELECT
                 f.forecast_id,
                 p.sku as item_id,
                 p.name as item_name,
@@ -90,7 +90,7 @@ async def get_inventory_forecast(
                 END as severity_rank,
                 f.last_updated
         """ + base_query
-        
+
         # Determine order clauses with consistent secondary sorting
         if sort_by == 'severity':
             order_clause = f" ORDER BY severity_rank {sort_order.upper()}, item_name ASC"
@@ -100,10 +100,10 @@ async def get_inventory_forecast(
             # Add secondary sort by product name for consistent ordering
             order_clause = f" ORDER BY {valid_sort_keys[sort_by]} {sort_order.upper()}, item_name ASC"
         data_query += order_clause + " LIMIT %s OFFSET %s"
-        
+
         data_params = params + [limit, offset]
         results = db.execute_query(data_query, data_params)
-        
+
         # Create pagination metadata
         pagination = PaginationMeta(
             total=total,
@@ -117,7 +117,7 @@ async def get_inventory_forecast(
             items=[{k: v for k, v in row.items() if k not in ('severity_rank', 'last_updated')} for row in results],
             pagination=pagination
         )
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch inventory forecast: {str(e)}")
 
@@ -134,9 +134,9 @@ async def get_stock_alerts_kpi():
                 SUM(CASE WHEN current_stock < reorder_point * 1.5 THEN 1 ELSE 0 END) as total_alerts
             FROM inventory_forecast
         """
-        
+
         result = db.execute_query(query)
-        
+
         if result:
             return StockManagementAlertKPI(
                 low_stock_items=result[0].get("low_stock_items", 0) or 0,
@@ -144,14 +144,14 @@ async def get_stock_alerts_kpi():
                 reorder_needed_items=result[0].get("reorder_needed_items", 0) or 0,
                 total_alerts=result[0].get("total_alerts", 0) or 0
             )
-        
+
         return StockManagementAlertKPI(
             low_stock_items=0,
             out_of_stock_items=0,
             reorder_needed_items=0,
             total_alerts=0
         )
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch stock alerts KPI: {str(e)}")
 
@@ -165,44 +165,44 @@ async def update_inventory_forecast(forecast_id: int, forecast_update: Inventory
         # Build update query dynamically
         update_fields = []
         params = []
-        
+
         if forecast_update.current_stock is not None:
             update_fields.append("current_stock = %s")
             params.append(forecast_update.current_stock)
-        
+
         if forecast_update.forecast_30_days is not None:
             update_fields.append("forecast_30_days = %s")
             params.append(forecast_update.forecast_30_days)
-        
+
         if forecast_update.reorder_point is not None:
             update_fields.append("reorder_point = %s")
             params.append(forecast_update.reorder_point)
-        
+
         if forecast_update.reorder_quantity is not None:
             update_fields.append("reorder_quantity = %s")
             params.append(forecast_update.reorder_quantity)
-        
+
         if forecast_update.status is not None:
             update_fields.append("status = %s")
             params.append(forecast_update.status.value)
-        
+
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
-        
+
         update_fields.append("last_updated = CURRENT_TIMESTAMP")
         params.append(forecast_id)
-        
+
         query = f"""
-            UPDATE inventory_forecast 
+            UPDATE inventory_forecast
             SET {', '.join(update_fields)}
             WHERE forecast_id = %s
         """
-        
+
         rows_affected = db.execute_update(query, params)
-        
+
         if rows_affected == 0:
             raise HTTPException(status_code=404, detail="Forecast record not found")
-        
+
         # Return updated forecast
         result = db.execute_query(
             """
@@ -210,18 +210,16 @@ async def update_inventory_forecast(forecast_id: int, forecast_update: Inventory
             FROM inventory_forecast f
             JOIN products p ON f.product_id = p.product_id
             WHERE f.forecast_id = %s
-            """, 
+            """,
             [forecast_id]
         )
-        
+
         if result:
             return result[0]
-        
+
         raise HTTPException(status_code=500, detail="Failed to retrieve updated forecast")
-    
+
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update forecast: {str(e)}")
-
-

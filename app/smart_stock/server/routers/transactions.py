@@ -64,7 +64,7 @@ async def get_transactions(
                 t.transaction_timestamp,
                 t.status
         """ + base_query + " ORDER BY t.transaction_timestamp DESC LIMIT %s OFFSET %s"
-        
+
         data_params = params + [limit, offset]
         results = db.execute_query(data_query, tuple(data_params))
 
