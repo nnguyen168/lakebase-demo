@@ -199,6 +199,9 @@ const OrderManagement: React.FC = () => {
     // Show success modal with order data
     setSuccessOrderData(orderData);
     setIsOrderSuccessModalOpen(true);
+    
+    // Refresh inventory forecast since order creation may have resolved alerts
+    fetchInventory(inventoryPagination.offset, inventoryPagination.limit);
   };
 
   const closeOrderSuccessModal = () => {

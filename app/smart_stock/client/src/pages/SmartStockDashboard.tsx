@@ -372,7 +372,8 @@ const SmartStockDashboard: React.FC = () => {
     setSuccessOrderData(orderData);
     setOrderSuccessModalOpen(true);
     
-    // Reload alert counts since order creation may have resolved some alerts
+    // Refresh forecast table and alert counts since order creation may have resolved alerts
+    loadForecast(forecastPagination.offset, forecastPagination.limit);
     loadAlertCounts();
   };
 
