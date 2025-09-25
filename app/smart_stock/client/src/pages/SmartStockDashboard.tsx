@@ -311,7 +311,7 @@ const SmartStockDashboard: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusStyle = getInventoryStatusStyle(status);
+    const statusStyle = getTransactionStatusStyle(status);
     const StatusIcon = statusStyle.icon;
 
     return (

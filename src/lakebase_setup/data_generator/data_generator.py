@@ -527,8 +527,8 @@ class TransactionGenerator:
         elif days_ago > 1:  # 1-3 days old - more active statuses
             # 35% delivered, 65% other statuses
             adjusted_weights = [0.35] + [0.65 / (len(status_options) - 1)] * (len(status_options) - 1)
-        else:  # Very recent (today/yesterday) - use original distribution for variety
-            adjusted_weights = base_weights
+        else:  # Very recent (today/yesterday) - 5% delivered, 95% other statuses
+            adjusted_weights = [0.05] + [0.95 / (len(status_options) - 1)] * (len(status_options) - 1)
         
         return random.choices(status_options, weights=adjusted_weights)[0]
     
