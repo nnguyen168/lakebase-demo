@@ -16,7 +16,7 @@ import Pagination, { PaginationMeta } from '@/components/ui/pagination';
 import {
   AlertTriangle, Package, TrendingUp, Clock, Truck,
   CheckCircle, Factory, ArrowUp, ArrowDown,
-  Activity, ShoppingCart, Loader2
+  Activity, ShoppingCart, Loader2, ArrowUpDown, ChevronUp, ChevronDown
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client/client';
 import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse } from '@/fastapi_client';
@@ -62,6 +62,13 @@ const SmartStockDashboard: React.FC = () => {
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [transactionKpi, setTransactionKpi] = useState<TransactionManagementKPI | null>(null);
+  const [alertCounts, setAlertCounts] = useState({ critical: 0, warning: 0, total: 0 });
+  type ForecastSortKey = 'severity' | 'stock' | 'forecast' | 'product';
+  interface ForecastSortState {
+    key: ForecastSortKey;
+    direction: 'asc' | 'desc';
+  }
+  const [forecastSort, setForecastSort] = useState<ForecastSortState>({ key: 'severity', direction: 'asc' });
   
   // Pagination state
   const [transactionsPagination, setTransactionsPagination] = useState<PaginationMeta>({
@@ -89,13 +96,45 @@ const SmartStockDashboard: React.FC = () => {
     loadDashboardData();
   }, []);
 
+  useEffect(() => {
+    // Reload forecast when sort changes
+    loadForecast(forecastPagination.offset, forecastPagination.limit);
+    loadAlertCounts();
+  }, [forecastSort.key, forecastSort.direction]);
+
+  const sortForecastItems = (items: InventoryForecastResponse[], sortState: ForecastSortState) => {
+    const sorted = [...items];
+    sorted.sort((a, b) => {
+      let comparison = 0;
+      switch (sortState.key) {
+        case 'severity':
+          comparison = getSeverityRank(a.status) - getSeverityRank(b.status);
+          break;
+        case 'stock':
+          comparison = a.stock - b.stock;
+          break;
+        case 'forecast':
+          comparison = a.forecast_30_days - b.forecast_30_days;
+          break;
+        case 'product':
+          comparison = a.item_name.localeCompare(b.item_name);
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortState.direction === 'asc' ? comparison : -comparison;
+    });
+    return sorted;
+  };
+
   const loadDashboardData = async () => {
     setLoading(true);
     try {
       await Promise.all([
         loadTransactions(transactionsPagination.offset, transactionsPagination.limit),
         loadForecast(forecastPagination.offset, forecastPagination.limit),
-        loadKpis()
+        loadKpis(),
+        loadAlertCounts()
       ]);
     } finally {
       setLoading(false);
@@ -172,12 +211,14 @@ const SmartStockDashboard: React.FC = () => {
     try {
       setForecastLoading(true);
       
-      // Load forecast data with pagination
+      // Load forecast data with pagination and server-side sorting
       const forecastResponse = await apiClient.getInventoryForecast(
         undefined, // warehouseId
         undefined, // status
         limit,
-        offset
+        offset,
+        forecastSort.key,
+        forecastSort.direction
       );
       
       if (forecastResponse) {
@@ -216,6 +257,44 @@ const SmartStockDashboard: React.FC = () => {
     }
   };
 
+  const loadAlertCounts = async () => {
+    try {
+      let allItems: any[] = [];
+      let offset = 0;
+      const limit = 500; // Maximum allowed by API
+      let hasMore = true;
+
+      // Paginate through all items to get accurate counts with current sorting
+      while (hasMore) {
+        const response = await apiClient.getInventoryForecast(
+          undefined, // warehouseId
+          undefined, // status
+          limit,
+          offset,
+          forecastSort.key,
+          forecastSort.direction
+        );
+        
+        if (response && response.items.length > 0) {
+          allItems.push(...response.items);
+          hasMore = response.pagination.has_next;
+          offset += limit;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      // Count different types of alerts
+      const critical = allItems.filter(f => f.status === 'out_of_stock' || f.status === 'reorder_needed').length;
+      const warning = allItems.filter(f => f.status === 'low_stock').length;
+      const total = allItems.length;
+      
+      setAlertCounts({ critical, warning, total });
+    } catch (error) {
+      console.error('Error loading alert counts:', error);
+    }
+  };
+
   const getWarehouseLocation = (name: string): string => {
     const locations: Record<string, string> = {
       'Lyon Main Warehouse': 'Zone Industrielle, 69007 Lyon, France',
@@ -232,7 +311,7 @@ const SmartStockDashboard: React.FC = () => {
   };
 
   const getStatusBadge = (status: string) => {
-    const statusStyle = getTransactionStatusStyle(status);
+    const statusStyle = getInventoryStatusStyle(status);
     const StatusIcon = statusStyle.icon;
 
     return (
@@ -253,8 +332,7 @@ const SmartStockDashboard: React.FC = () => {
   };
 
   const getCriticalAlerts = () => {
-    const criticalProducts = forecast.filter(f => f.status === 'out_of_stock' || f.status === 'reorder_needed');
-    return criticalProducts.length;
+    return alertCounts.critical;
   };
 
   const handleViewForecast = (item: InventoryForecastResponse) => {
@@ -272,6 +350,13 @@ const SmartStockDashboard: React.FC = () => {
     setCreateOrderModalOpen(true);
   };
 
+  const handleCreateOrderFromForecast = (item: InventoryForecastResponse) => {
+    // Close forecast modal and open create order modal
+    setForecastModalOpen(false);
+    setSelectedForecastItem(null);
+    handleCreateOrder(item);
+  };
+
   const closeCreateOrderModal = () => {
     setCreateOrderModalOpen(false);
     setSelectedOrderItem(null);
@@ -280,6 +365,15 @@ const SmartStockDashboard: React.FC = () => {
   const handleOrderCreated = () => {
     // Refresh dashboard data after order creation
     loadDashboardData();
+  };
+
+  const handleOrderSuccess = (orderData: any) => {
+    // Show success modal with order data
+    setSuccessOrderData(orderData);
+    setOrderSuccessModalOpen(true);
+    
+    // Reload alert counts since order creation may have resolved some alerts
+    loadAlertCounts();
   };
 
   // Pagination handlers
@@ -291,11 +385,26 @@ const SmartStockDashboard: React.FC = () => {
     loadForecast(offset, limit);
   };
 
-  const handleOrderSuccess = (orderData: any) => {
-    // Show success modal with order data
-    setSuccessOrderData(orderData);
-    setOrderSuccessModalOpen(true);
+  const handleForecastSort = (key: ForecastSortKey) => {
+    setForecastSort((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      // Severity default to ascending (critical first), others descending
+      const defaultDirection = key === 'severity' ? 'asc' : 'desc';
+      return { key, direction: defaultDirection };
+    });
   };
+
+  const getSortIcon = (key: ForecastSortKey) => {
+    if (forecastSort.key !== key) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 text-slate-400" />;
+    }
+    return forecastSort.direction === 'asc'
+      ? <ChevronUp className="h-3 w-3 ml-1 text-blue-600" />
+      : <ChevronDown className="h-3 w-3 ml-1 text-blue-600" />;
+  };
+
 
   const closeOrderSuccessModal = () => {
     setOrderSuccessModalOpen(false);
@@ -349,7 +458,7 @@ const SmartStockDashboard: React.FC = () => {
             <AlertTriangle className="h-4 w-4 text-red-600" />
             <AlertTitle className="text-red-900">Action Required</AlertTitle>
             <AlertDescription className="text-red-700">
-              {criticalAlerts} components need immediate attention - check the forecast tab for details
+              {criticalAlerts} components need immediate attention{alertCounts.warning > 0 && ` and ${alertCounts.warning} require monitoring`} - check the forecast tab for details
             </AlertDescription>
           </Alert>
         </div>
@@ -605,11 +714,31 @@ const SmartStockDashboard: React.FC = () => {
                     <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Product</TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none"
+                          onClick={() => handleForecastSort('product')}
+                        >
+                          <div className="flex items-center">Product {getSortIcon('product')}</div>
+                        </TableHead>
                         <TableHead>SKU</TableHead>
-                        <TableHead>Current Stock</TableHead>
-                        <TableHead>30-Day Forecast</TableHead>
-                        <TableHead>Status</TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none"
+                          onClick={() => handleForecastSort('stock')}
+                        >
+                          <div className="flex items-center">Current Stock {getSortIcon('stock')}</div>
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none"
+                          onClick={() => handleForecastSort('forecast')}
+                        >
+                          <div className="flex items-center">30-Day Forecast {getSortIcon('forecast')}</div>
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none"
+                          onClick={() => handleForecastSort('severity')}
+                        >
+                          <div className="flex items-center">Status {getSortIcon('severity')}</div>
+                        </TableHead>
                         <TableHead>Recommended Action</TableHead>
                         <TableHead>View Forecast</TableHead>
                         <TableHead>Create Order</TableHead>
@@ -712,6 +841,7 @@ const SmartStockDashboard: React.FC = () => {
         isOpen={forecastModalOpen}
         onClose={closeForecastModal}
         item={selectedForecastItem}
+        onCreateOrder={handleCreateOrderFromForecast}
       />
 
       {/* Create Order Modal */}

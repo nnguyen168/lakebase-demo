@@ -211,6 +211,13 @@ const OrderManagement: React.FC = () => {
     setIsForecastModalOpen(true);
   };
 
+  const handleCreateOrderFromForecast = (item: InventoryForecastData) => {
+    // Close forecast modal and open create order modal
+    setIsForecastModalOpen(false);
+    setSelectedInventoryItem(null);
+    setIsCreateModalOpen(true);
+  };
+
   const getStatusTooltip = (status: string): string => {
     switch (status.toLowerCase()) {
       case 'pending':
@@ -545,6 +552,7 @@ const OrderManagement: React.FC = () => {
         isOpen={isForecastModalOpen}
         onClose={() => setIsForecastModalOpen(false)}
         item={selectedInventoryItem}
+        onCreateOrder={handleCreateOrderFromForecast}
       />
     </div>
   );

@@ -21,7 +21,7 @@ import {
 } from 'recharts';
 import { 
   AlertTriangle, Package, 
-  BarChart3, X, Target
+  BarChart3, X, Target, ShoppingCart
 } from 'lucide-react';
 
 import type { InventoryForecastResponse } from '@/fastapi_client';
@@ -37,12 +37,14 @@ interface ForecastModalProps {
   isOpen: boolean;
   onClose: () => void;
   item: InventoryForecastResponse | null;
+  onCreateOrder?: (item: InventoryForecastResponse) => void;
 }
 
 const ForecastModal: React.FC<ForecastModalProps> = ({ 
   isOpen, 
   onClose, 
-  item 
+  item,
+  onCreateOrder
 }) => {
   const [forecastData, setForecastData] = useState<ForecastDataPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -116,6 +118,18 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
     setLoading(false);
   };
 
+  const handleReorder = () => {
+    if (item && onCreateOrder) {
+      onCreateOrder(item);
+      onClose(); // Close the forecast modal after starting order creation
+    }
+  };
+
+  const canReorder = (status: string) => {
+    // Don't allow reordering for resolved items
+    return status.toLowerCase() !== 'resolved';
+  };
+
   const getInventoryStatusStyles = (status: string) => {
     switch (status.toLowerCase()) {
       case 'in_stock':
@@ -140,6 +154,12 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
         return {
           variant: 'secondary' as const,
           className: 'bg-orange-100 text-orange-800 border-orange-200',
+          icon: Target
+        };
+      case 'resolved':
+        return {
+          variant: 'secondary' as const,
+          className: 'bg-gray-100 text-gray-800 border-gray-200',
           icon: Target
         };
       default:
@@ -292,10 +312,16 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
               </CardContent>
             </Card>
             
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onClose}>
                 Close
               </Button>
+              {onCreateOrder && canReorder(item.status) && (
+                <Button onClick={handleReorder} className="flex items-center gap-2">
+                  <ShoppingCart className="h-4 w-4" />
+                  Create Order
+                </Button>
+              )}
             </div>
           </div>
         </div>

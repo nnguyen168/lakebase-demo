@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, Package, Calendar, User, FileText } from 'lucide-react';
+import { CheckCircle, Package, Calendar, User, FileText, Target } from 'lucide-react';
 
 interface OrderData {
   order_id: number;
@@ -24,6 +24,7 @@ interface OrderData {
   product_name?: string;
   product_sku?: string;
   unit_price?: string;
+  forecast_id?: number;
 }
 
 interface OrderSuccessModalProps {
@@ -70,6 +71,16 @@ const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
               Order {orderData.order_number} has been created successfully with status: {orderData.status}
             </AlertDescription>
           </Alert>
+
+          {/* Recommendation Resolved Alert */}
+          {orderData.forecast_id && (
+            <Alert className="border-blue-200 bg-blue-50 text-blue-800">
+              <Target className="h-4 w-4 text-blue-600" />
+              <AlertDescription>
+                Recommendation #{orderData.forecast_id} has been resolved. This order addresses the inventory forecast that triggered the reorder alert.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Order Details */}
           <div className="bg-gray-50 p-4 rounded-lg space-y-3">

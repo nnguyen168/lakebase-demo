@@ -25,7 +25,9 @@ export class InventoryService {
         warehouseId?: (number | null),
         status?: (ForecastStatus | null),
         limit: number = 100,
-        offset?: number,
+        offset: number = 0,
+        sortBy: string = 'severity',
+        sortOrder: string = 'asc',
     ): CancelablePromise<PaginatedResponse_InventoryForecastResponse_> {
         return __request(OpenAPI, {
             method: 'GET',
@@ -35,6 +37,8 @@ export class InventoryService {
                 'status': status,
                 'limit': limit,
                 'offset': offset,
+                'sort_by': sortBy,
+                'sort_order': sortOrder,
             },
             errors: {
                 422: `Validation Error`,

@@ -19,10 +19,24 @@ async def get_inventory_forecast(
     warehouse_id: Optional[int] = Query(None, description="Filter by warehouse ID"),
     status: Optional[ForecastStatus] = Query(None, description="Filter by forecast status"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of items to return"),
-    offset: int = Query(0, ge=0, description="Number of items to skip")
+    offset: int = Query(0, ge=0, description="Number of items to skip"),
+    sort_by: str = Query('severity', description="Sort key"),
+    sort_order: str = Query('asc', description="Sort order: asc or desc")
 ):
     """Get inventory forecast with optional filters and pagination metadata."""
     try:
+        # Validate sort key
+        valid_sort_keys = {
+            'severity': "severity",
+            'stock': "stock",
+            'forecast': "forecast_30_days",
+            'product': "item_name",
+            'last_updated': "f.last_updated"
+        }
+        if sort_by not in valid_sort_keys:
+            sort_by = 'severity'
+        sort_order = 'desc' if sort_order.lower() == 'desc' else 'asc'
+        
         # Build base query for filtering
         base_query = """
             FROM inventory_forecast f
@@ -66,8 +80,26 @@ async def get_inventory_forecast(
                     WHEN f.current_stock < f.reorder_point THEN 'Reorder Now'
                     WHEN f.current_stock < f.reorder_point * 1.5 THEN 'Monitor'
                     ELSE 'No Action'
-                END as action
-        """ + base_query + " ORDER BY f.last_updated DESC LIMIT %s OFFSET %s"
+                END as action,
+                CASE
+                    WHEN f.status = 'resolved' THEN 4
+                    WHEN f.current_stock = 0 THEN 0
+                    WHEN f.current_stock < f.reorder_point THEN 1
+                    WHEN f.current_stock < f.reorder_point * 1.5 THEN 2
+                    ELSE 3
+                END as severity_rank,
+                f.last_updated
+        """ + base_query
+        
+        # Determine order clauses with consistent secondary sorting
+        if sort_by == 'severity':
+            order_clause = f" ORDER BY severity_rank {sort_order.upper()}, item_name ASC"
+        elif sort_by == 'product':
+            order_clause = f" ORDER BY item_name {sort_order.upper()}"
+        else:
+            # Add secondary sort by product name for consistent ordering
+            order_clause = f" ORDER BY {valid_sort_keys[sort_by]} {sort_order.upper()}, item_name ASC"
+        data_query += order_clause + " LIMIT %s OFFSET %s"
         
         data_params = params + [limit, offset]
         results = db.execute_query(data_query, data_params)
@@ -82,7 +114,7 @@ async def get_inventory_forecast(
         )
 
         return PaginatedResponse(
-            items=results,
+            items=[{k: v for k, v in row.items() if k not in ('severity_rank', 'last_updated')} for row in results],
             pagination=pagination
         )
     
