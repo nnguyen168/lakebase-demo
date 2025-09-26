@@ -74,22 +74,22 @@ async def get_inventory_forecast(
                 CASE
                     WHEN f.status = 'resolved' THEN 'resolved'
                     WHEN f.current_stock = 0 THEN 'out_of_stock'
-                    WHEN f.current_stock < f.reorder_point THEN 'reorder_needed'
-                    WHEN f.current_stock < f.reorder_point * 1.5 THEN 'low_stock'
+                    WHEN f.current_stock < (f.forecast_30_days * 0.5) THEN 'reorder_needed'  -- Less than 15 days of stock
+                    WHEN f.current_stock < f.forecast_30_days THEN 'low_stock'  -- Less than 30 days of stock
                     ELSE 'in_stock'
                 END as status,
                 CASE
                     WHEN f.status = 'resolved' THEN 'Resolved'
                     WHEN f.current_stock = 0 THEN 'Urgent Reorder'
-                    WHEN f.current_stock < f.reorder_point THEN 'Reorder Now'
-                    WHEN f.current_stock < f.reorder_point * 1.5 THEN 'Monitor'
+                    WHEN f.current_stock < (f.forecast_30_days * 0.5) THEN 'Reorder Now'  -- Less than 15 days
+                    WHEN f.current_stock < f.forecast_30_days THEN 'Monitor'  -- Less than 30 days
                     ELSE 'No Action'
                 END as action,
                 CASE
                     WHEN f.status = 'resolved' THEN 4
                     WHEN f.current_stock = 0 THEN 0
-                    WHEN f.current_stock < f.reorder_point THEN 1
-                    WHEN f.current_stock < f.reorder_point * 1.5 THEN 2
+                    WHEN f.current_stock < (f.forecast_30_days * 0.5) THEN 1  -- Most urgent
+                    WHEN f.current_stock < f.forecast_30_days THEN 2  -- Warning
                     ELSE 3
                 END as severity_rank,
                 f.last_updated
@@ -202,10 +202,10 @@ async def get_stock_alerts_kpi():
     try:
         query = """
             SELECT
-                SUM(CASE WHEN current_stock < reorder_point * 1.5 AND current_stock > reorder_point THEN 1 ELSE 0 END) as low_stock_items,
+                SUM(CASE WHEN current_stock < forecast_30_days AND current_stock >= (forecast_30_days * 0.5) THEN 1 ELSE 0 END) as low_stock_items,
                 SUM(CASE WHEN current_stock = 0 THEN 1 ELSE 0 END) as out_of_stock_items,
-                SUM(CASE WHEN current_stock < reorder_point AND current_stock > 0 THEN 1 ELSE 0 END) as reorder_needed_items,
-                SUM(CASE WHEN current_stock < reorder_point * 1.5 THEN 1 ELSE 0 END) as total_alerts
+                SUM(CASE WHEN current_stock < (forecast_30_days * 0.5) AND current_stock > 0 THEN 1 ELSE 0 END) as reorder_needed_items,
+                SUM(CASE WHEN current_stock < forecast_30_days THEN 1 ELSE 0 END) as total_alerts
             FROM inventory_forecast
         """
 

@@ -79,13 +79,15 @@ try:
             reorder_quantity = int(avg_daily_demand * 30)  # Order for 30 days
             confidence_score = min(0.95, 0.7 + (sales_data['transaction_count'] * 0.01))  # Higher confidence with more data
 
-            # Determine status based on current stock
+            # Determine status based on current stock vs 30-day forecast
+            forecast_15_days = forecast_30_days * 0.5  # 15 days worth of demand
+            
             if current_stock == 0:
                 status = 'expired'  # Out of stock
-            elif current_stock < reorder_point:
-                status = 'pending'  # Need to reorder
+            elif current_stock < forecast_15_days:
+                status = 'pending'  # Need to reorder (less than 15 days of stock)
             else:
-                status = 'active'  # Good stock level
+                status = 'active'  # Good stock level (more than 15 days)
 
             # Insert forecast record
             cursor.execute("""
