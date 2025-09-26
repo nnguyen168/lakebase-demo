@@ -57,7 +57,7 @@ class TransactionGenerator:
         
         # Track reorder history to prevent duplicate reorders
         self.reorder_history = {}  # {(product_id, warehouse_id): last_reorder_date}
-        self.reorder_cooldown_days = 7  # Minimum days between reorders for same product-warehouse
+        self.reorder_cooldown_days = 14  # Increased cooldown for bulk ordering approach
         
         # Track historical inventory levels for output
         self.inventory_history = []  # List of inventory snapshots over time
@@ -65,24 +65,26 @@ class TransactionGenerator:
         # Transaction types and their characteristics
         self.transaction_types = {
             "inbound": {
-                "frequency": 0.20,  # Further reduced to 20% for lean operations
-                "quantity_range": (5, 80),  # Smaller quantities for lean inventory
+                "frequency": 0.0,  # No random inbound - only reorder point driven
+                "quantity_range": (30, 250),  # Even larger quantities for bulk ordering
                 "status_options": ["delivered", "shipped", "processing", "confirmed", "pending"],
                 "status_weights": [0.70, 0.15, 0.10, 0.03, 0.02],
                 "note_templates": [
-                    "Monthly {category} shipment",
-                    "Regular {category} delivery",
-                    "URGENT: {category} expedite",
-                    "emergency: {category} shortage",
-                    "rush: {category} air freight",
-                    "{category} stock replenishment",
-                    "Quarterly {category} order",
-                    "Bulk {category} purchase"
+                    "Bulk {category} shipment - quarterly order",
+                    "Large {category} delivery - bulk purchase",
+                    "URGENT: {category} bulk expedite",
+                    "Emergency: {category} bulk shortage",
+                    "Rush: {category} bulk air freight",
+                    "{category} bulk stock replenishment",
+                    "Quarterly bulk {category} order",
+                    "Major bulk {category} purchase",
+                    "Wholesale {category} delivery",
+                    "Large-scale {category} procurement"
                 ]
             },
             "sale": {
-                "frequency": 0.75,  # Increased to 75% for higher turnover
-                "quantity_range": (1, 18),  # Increased consumption for lean operations
+                "frequency": 0.92,  # Increased to compensate for removing random inbound
+                "quantity_range": (1, 15),  # Reduced by ~3x for smaller, more realistic consumption
                 "status_options": ["delivered", "processing", "confirmed", "pending"],
                 "status_weights": [0.85, 0.10, 0.03, 0.02],
                 "note_templates": [
@@ -110,7 +112,7 @@ class TransactionGenerator:
                 ]
             },
             "adjustment": {
-                "frequency": 0.05,  # 5% of transactions (unchanged)
+                "frequency": 0.08,  # Increased to compensate for removing random inbound
                 "quantity_range": (-10, 10),
                 "status_options": ["delivered", "confirmed"],
                 "status_weights": [0.95, 0.05],
@@ -325,8 +327,8 @@ class TransactionGenerator:
             reorder_level = product["reorder_level"]
             
             for warehouse_id in [1, 2, 3]:
-                # Set initial inventory to lean levels: 1.2-2.2x reorder level
-                base_stock = reorder_level * random.uniform(1.2, 2.2)
+                # Set initial inventory for bulk ordering: 2.0-4.0x reorder level
+                base_stock = reorder_level * random.uniform(2.0, 4.0)
                 
                 # Adjust by warehouse capacity (lean multipliers)
                 if warehouse_id == 1:  # Lyon - high capacity
@@ -424,29 +426,29 @@ class TransactionGenerator:
         reorder_level = product["reorder_level"]
         
         if transaction_type == "inbound":
-            # Inbound transactions - balanced with sales and inventory-aware
+            # Inbound transactions - bulk ordering approach
             if self.product_categories[category]["bulk_order_frequency"] > 0.7:
-                # High bulk frequency - moderate quantities
-                multiplier = random.uniform(0.9, 1.4)
+                # High bulk frequency - larger quantities
+                multiplier = random.uniform(1.5, 2.5)
             else:
-                multiplier = random.uniform(0.7, 1.2)
+                multiplier = random.uniform(1.2, 2.0)
             
-            # Ultra-lean inventory management - minimal excess
-            if current_inventory < reorder_level * 0.3:
-                # Critical restocking - but controlled
-                multiplier *= random.uniform(1.0, 1.4)
-            elif current_inventory < reorder_level * 0.8:
-                # Normal restocking - minimal quantities
-                multiplier *= random.uniform(0.8, 1.2)
-            elif current_inventory < reorder_level * 1.2:
-                # Light restocking
-                multiplier *= random.uniform(0.6, 0.9)
+            # Bulk inventory management - larger orders, less frequent
+            if current_inventory < reorder_level * 0.5:
+                # Critical restocking - large bulk order
+                multiplier *= random.uniform(1.8, 2.5)
+            elif current_inventory < reorder_level * 1.5:
+                # Normal restocking - substantial quantities
+                multiplier *= random.uniform(1.3, 1.8)
+            elif current_inventory < reorder_level * 2.5:
+                # Light restocking - moderate bulk
+                multiplier *= random.uniform(0.8, 1.3)
             else:
-                # Already well-stocked, very minimal inbound
-                multiplier *= random.uniform(0.1, 0.3)
+                # Already well-stocked, minimal inbound
+                multiplier *= random.uniform(0.2, 0.5)
             
             quantity = int(random.uniform(*base_range) * multiplier)
-            return max(3, quantity)  # Lower minimum for lean operations
+            return max(15, quantity)  # Higher minimum for bulk operations
             
         elif transaction_type == "sale":
             # Sale transactions - limited by current inventory and balanced approach
@@ -454,25 +456,34 @@ class TransactionGenerator:
             if max_sale <= 0:
                 return 0  # No sales if no inventory
             
-            # Reduce sales pressure when inventory is low to maintain balance
+            # Natural manufacturing consumption based on inventory levels - reduced by ~3x
             if current_inventory < reorder_level:
-                # Very conservative sales when below reorder level
-                max_sale = min(max_sale, max(1, int(current_inventory * 0.2)))
-            elif current_inventory < reorder_level * 1.5:
-                # Moderate sales when approaching reorder level
-                max_sale = min(max_sale, max(1, int(current_inventory * 0.4)))
+                # Conservative consumption when below reorder level
+                max_sale = min(max_sale, max(1, int(current_inventory * 0.05)))
+            elif current_inventory < reorder_level * 2.0:
+                # Normal consumption when in healthy range
+                max_sale = min(max_sale, max(1, int(current_inventory * 0.07)))
+            elif current_inventory < reorder_level * 3.0:
+                # Higher consumption when well-stocked (natural production patterns)
+                max_sale = min(max_sale, max(1, int(current_inventory * 0.06)))
+            else:
+                # Steady consumption even when overstocked
+                max_sale = min(max_sale, max(1, int(current_inventory * 0.05)))
             
-            # Generate sale quantity with bias toward smaller quantities for smoother sales
+            # Generate sale quantity - smaller, more realistic manufacturing consumption
             if max_sale <= 3:
                 # For very small max sales, use uniform distribution
                 quantity = random.randint(1, max_sale)
             else:
-                # For larger max sales, bias toward smaller quantities
-                # 80% chance of small quantities (1-4), 20% chance of larger quantities
-                if random.random() < 0.8:
-                    quantity = random.randint(1, min(4, max_sale))
+                # For larger max sales, heavily favor small transactions
+                # 70% very small (1-2), 25% small (3-5), 5% medium (6+)
+                rand = random.random()
+                if rand < 0.7:
+                    quantity = random.randint(1, min(2, max_sale))
+                elif rand < 0.95:
+                    quantity = random.randint(min(3, max_sale), min(5, max_sale))
                 else:
-                    quantity = random.randint(min(5, max_sale), max_sale)
+                    quantity = random.randint(min(6, max_sale), max_sale)
             
             return quantity
             
@@ -561,18 +572,13 @@ class TransactionGenerator:
         base_transactions = int(150 * daily_activity)  # Reduced for more realistic transaction volume
         num_transactions = max(1, int(np.random.poisson(base_transactions)))
         
-        # Check for reorder needs more frequently to maintain balanced inventory
+        # Check for reorders based purely on inventory levels (no probability)
+        # Only check on business days for realistic business operations
         is_business_day = date.weekday() < 5  # Monday=0, Friday=4
         if is_business_day:
-            # Higher probability on Mondays (weekly planning), moderate on other days
-            if date.weekday() == 0:  # Monday
-                reorder_probability = 0.4  # Increased for proactive management
-            else:
-                reorder_probability = 0.2  # Increased for better responsiveness
-            
-            if random.random() < reorder_probability:
-                reorder_transactions = self.generate_reorder_transactions(date, 0)
-                transactions.extend(reorder_transactions)
+            # Always check for reorder needs - but only reorder if inventory is actually low
+            reorder_transactions = self.generate_reorder_transactions(date, 0)
+            transactions.extend(reorder_transactions)
         
         # Assess inventory health for dynamic balancing
         health_factor = self.assess_inventory_health()
@@ -583,11 +589,16 @@ class TransactionGenerator:
         
         # Adjust inbound frequency based on inventory health
         adjusted_frequencies["inbound"] *= health_factor
+        
+        # No artificial sales boosting - let natural consumption work
+        
         # Normalize frequencies to sum to 1.0
         total_freq = sum(adjusted_frequencies.values())
         adjusted_frequencies = {k: v/total_freq for k, v in adjusted_frequencies.items()}
         
-        # Generate transactions
+        # No artificial balancing - rely on realistic reorder point logic
+        
+        # Generate regular transactions
         for i in range(num_transactions):
             
             # Select transaction type with health-adjusted frequencies
@@ -666,33 +677,32 @@ class TransactionGenerator:
                 # Check if we need to reorder with more proactive thresholds
                 needs_reorder = False
                 
-                # Proactive reordering when inventory is below 1.5x reorder level
-                if current_inventory < reorder_level * 1.5:
+                # Realistic reorder point - only when inventory is genuinely low
+                if current_inventory <= reorder_level:
                     last_reorder = self.reorder_history.get(key)
                     if last_reorder is None:
-                        # Never reordered before
+                        # Never reordered before - reorder immediately
                         needs_reorder = True
                     else:
                         days_since_reorder = (date - last_reorder).days
-                        # Shorter cooldown for more responsive restocking
-                        cooldown_days = 5 if current_inventory < reorder_level else 7
+                        # Minimum cooldown to prevent duplicate orders
+                        cooldown_days = 3 if current_inventory == 0 else 7
                         if days_since_reorder >= cooldown_days:
                             needs_reorder = True
                 
                 if needs_reorder:
-                    # Generate ultra-lean reorder quantities - just enough to avoid stockout
-                    target_stock = reorder_level * 1.2  # Target: 1.2x reorder level for ultra-lean
-                    shortage = max(1, target_stock - current_inventory)
-                    
-                    if current_inventory < reorder_level * 0.3:
-                        # Emergency reorder - bring to minimal safe level
-                        reorder_quantity = int(shortage * random.uniform(1.0, 1.2))
-                    elif current_inventory < reorder_level * 0.8:
-                        # Standard reorder - minimal replenishment
-                        reorder_quantity = int(shortage * random.uniform(0.8, 1.0))
+                    # Generate realistic bulk reorder quantities based on reorder point
+                    if current_inventory == 0:
+                        # Emergency: bring to 4-6x reorder level to prevent future stockouts
+                        target_stock = reorder_level * random.uniform(4.0, 6.0)
+                    elif current_inventory < reorder_level * 0.5:
+                        # Critical: bring to 3-5x reorder level
+                        target_stock = reorder_level * random.uniform(3.0, 5.0)
                     else:
-                        # Proactive reorder - tiny top-up
-                        reorder_quantity = int(shortage * random.uniform(0.4, 0.6))
+                        # Standard: bring to 2.5-4x reorder level
+                        target_stock = reorder_level * random.uniform(2.5, 4.0)
+                    
+                    reorder_quantity = max(1, int(target_stock - current_inventory))
                     
                     # Generate transaction
                     timestamp = self.generate_transaction_timestamp(date)
@@ -704,13 +714,15 @@ class TransactionGenerator:
                     # Record this reorder in history
                     self.reorder_history[key] = date
                     
-                    # Determine urgency level based on how far below reorder level
+                    # Determine urgency level based on current inventory
                     if current_inventory == 0:
-                        urgency = "CRITICAL"
-                    elif current_inventory < reorder_level * 0.5:
+                        urgency = "CRITICAL STOCKOUT"
+                    elif current_inventory < reorder_level * 0.3:
                         urgency = "URGENT"
+                    elif current_inventory < reorder_level * 0.7:
+                        urgency = "HIGH"
                     else:
-                        urgency = "LOW"
+                        urgency = "STANDARD"
                     
                     # Generate time-aware status for reorder transactions
                     reorder_status = self.generate_time_aware_status("inbound", date)
@@ -722,7 +734,7 @@ class TransactionGenerator:
                         "quantity_change": reorder_quantity,
                         "transaction_type": "inbound",
                         "status": reorder_status,
-                        "notes": f"{urgency}: {product['category']} reorder - inventory at {current_inventory} (reorder level: {reorder_level})",
+                        "notes": f"{urgency}: {product['category']} reorder - inventory at {current_inventory} (reorder point: {reorder_level}) - ordering {reorder_quantity} units",
                         "transaction_timestamp": timestamp,
                         "updated_at": timestamp
                     }
@@ -757,8 +769,8 @@ class TransactionGenerator:
                 current_inventory = self.get_current_inventory(product_id, warehouse_id)
                 total_products += 1
                 
-                # Consider inventory healthy if it's above 1.2x reorder level
-                if current_inventory > reorder_level * 1.2:
+                # Consider inventory healthy if it's above 1.5x reorder level (realistic threshold)
+                if current_inventory > reorder_level * 1.5:
                     healthy_products += 1
         
         if total_products == 0:
@@ -766,19 +778,17 @@ class TransactionGenerator:
         
         health_ratio = healthy_products / total_products
         
-        # Return balance factor for lean operations:
-        # - Target 70-80% healthy ratio for lean inventory
-        # - More aggressive reduction when overstocked
+        # Return balance factor for realistic inventory management:
+        # - Target 70-85% healthy ratio 
+        # - Conservative adjustments based on overall inventory health
         if health_ratio < 0.4:
-            return 1.5  # Crisis mode - moderate increase
-        elif health_ratio < 0.6:
-            return 1.2  # Recovery mode
-        elif health_ratio < 0.8:
-            return 1.0  # Normal operations - lean target zone
-        elif health_ratio < 0.9:
-            return 0.6  # Reduce inbound - getting overstocked
+            return 1.3  # Low inventory - moderate increase in inbound frequency
+        elif health_ratio < 0.7:
+            return 1.1  # Below target - slight increase
+        elif health_ratio < 0.85:
+            return 1.0  # Normal operations - target zone
         else:
-            return 0.3  # Minimal inbound - overstocked
+            return 0.8  # Well-stocked - slight reduction in inbound frequency
     
     def generate_all_transactions(self) -> pd.DataFrame:
         """Generate all transactions for the entire period."""
