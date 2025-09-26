@@ -48,6 +48,33 @@ export class InventoryService {
         });
     }
     /**
+     * Get Inventory History
+     * Get historical inventory levels for a specific product and warehouse.
+     * @param itemId Product SKU to get history for
+     * @param warehouseId Warehouse ID to get history for
+     * @param days Number of days of history to return
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static getInventoryHistoryApiInventoryHistoryGet(
+        itemId: string,
+        warehouseId: number,
+        days: number = 30,
+    ): CancelablePromise<Array<{date: string; stock_level: number}>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/inventory/history',
+            query: {
+                'item_id': itemId,
+                'warehouse_id': warehouseId,
+                'days': days,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Get Stock Alerts Kpi
      * Get KPI metrics for stock management alerts.
      * @returns StockManagementAlertKPI Successful Response

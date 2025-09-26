@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 
 import type { InventoryForecastResponse } from '@/fastapi_client';
+import { InventoryService } from '@/fastapi_client';
 
 interface ForecastDataPoint {
   date: string;
@@ -57,43 +58,105 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
     }
   }, [isOpen, item]);
 
-  const generateForecastData = (item: InventoryForecastResponse) => {
+  const generateForecastData = async (item: InventoryForecastResponse) => {
     setLoading(true);
     
-    // Generate 30 days past + today + 30 days future
-    const data: ForecastDataPoint[] = [];
+    try {
+      // Fetch real historical data from the API
+      const historyData = await InventoryService.getInventoryHistoryApiInventoryHistoryGet(
+        item.item_id, 
+        item.warehouse_id, 
+        30
+      );
+
+      // Generate 30 days past + today + 30 days future
+      const data: ForecastDataPoint[] = [];
+      const today = new Date();
+      
+      // Create a map of historical data for easy lookup
+      const historyMap = new Map<string, number>();
+      historyData.forEach(entry => {
+        historyMap.set(entry.date, entry.stock_level);
+      });
+      
+      console.log(`📊 Historical data loaded: ${historyData.length} records for ${item.item_name}`, historyData);
+      
+      // Generate past 30 days + today using real historical data
+      for (let day = -30; day <= 0; day++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + day);
+        const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+        
+        if (day === 0) {
+          // Today - connect past to forecast
+          data.push({
+            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            day: day,
+            pastStock: item.stock,
+            forecastStock: item.stock, // Same value to connect the lines
+          });
+        } else {
+          // Past days - use real historical data if available, otherwise use current stock as fallback
+          const stockLevel = historyMap.get(dateKey) ?? item.stock;
+          const isHistoricalData = historyMap.has(dateKey);
+          
+          data.push({
+            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            day: day,
+            pastStock: Math.max(0, stockLevel),
+          });
+          
+          if (isHistoricalData) {
+            console.log(`📈 Using historical data for ${dateKey}: ${stockLevel}`);
+          }
+        }
+      }
+      
+      // Generate future forecast with the historical data
+      generateFutureForecast(data, item);
+      
+    } catch (error) {
+      console.warn('Failed to fetch historical data (possibly no data available), using fallback:', error);
+      
+      // Fallback to mock data if API call fails
+      const data: ForecastDataPoint[] = [];
+      const today = new Date();
+      let pastStock = Math.round(item.stock * 1.3); // Start higher in the past
+      
+      for (let day = -30; day <= 0; day++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + day);
+        
+        if (day === 0) {
+          data.push({
+            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            day: day,
+            pastStock: item.stock,
+            forecastStock: item.stock,
+          });
+        } else {
+          const progress = (30 + day) / 30;
+          const stockLevel = Math.round(
+            pastStock - ((pastStock - item.stock) * progress) + 
+            (Math.random() - 0.5) * 4
+          );
+          
+          data.push({
+            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            day: day,
+            pastStock: Math.max(0, stockLevel),
+          });
+        }
+      }
+      
+      // Generate future forecast for fallback data too
+      generateFutureForecast(data, item);
+    }
+  };
+
+  const generateFutureForecast = (data: ForecastDataPoint[], item: InventoryForecastResponse) => {
     const today = new Date();
     const todayDateString = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    
-    // Generate past 30 days + today (historical data)
-    let pastStock = Math.round(item.stock * 1.3); // Start higher in the past
-    for (let day = -30; day <= 0; day++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + day);
-      
-      if (day === 0) {
-        // Today - connect past to forecast
-        data.push({
-          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          day: day,
-          pastStock: item.stock,
-          forecastStock: item.stock, // Same value to connect the lines
-        });
-      } else {
-        // Past days - simulate gradual decline to today's stock
-        const progress = (30 + day) / 30; // 0 to 1 as we approach today
-        const stockLevel = Math.round(
-          pastStock - ((pastStock - item.stock) * progress) + 
-          (Math.random() - 0.5) * 4 // Small random variation
-        );
-        
-        data.push({
-          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          day: day,
-          pastStock: Math.max(0, stockLevel),
-        });
-      }
-    }
     
     // Generate future 30 days (forecast)
     let futureStock = item.stock;

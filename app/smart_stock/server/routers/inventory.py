@@ -126,6 +126,76 @@ async def get_inventory_forecast(
         raise HTTPException(status_code=500, detail=f"Failed to fetch inventory forecast: {str(e)}")
 
 
+@router.get("/history", response_model=List[dict])
+async def get_inventory_history(
+    item_id: str = Query(..., description="Product SKU to get history for"),
+    warehouse_id: int = Query(..., description="Warehouse ID to get history for"),
+    days: int = Query(30, ge=1, le=365, description="Number of days of history to return")
+):
+    """Get historical inventory levels for a specific product and warehouse."""
+    try:
+        # Query to get historical inventory levels from the inventory_historical table
+        # If that doesn't have data, we can fall back to reconstructing from transactions
+        query = """
+            SELECT 
+                ih.date as history_date,
+                ih.inventory_level as stock_level
+            FROM inventory_historical ih
+            JOIN products p ON ih.product_id = p.product_id
+            WHERE p.sku = %s 
+            AND ih.warehouse_id = %s 
+            AND ih.date >= CURRENT_DATE - INTERVAL '%s days'
+            ORDER BY ih.date ASC
+        """
+        
+        results = db.execute_query(query, (item_id, warehouse_id, days))
+        
+        # If no historical data found, try to reconstruct from transactions
+        if not results:
+            # Fallback query using inventory_transactions to reconstruct daily levels
+            fallback_query = """
+                WITH daily_transactions AS (
+                    SELECT 
+                        DATE(it.transaction_timestamp) as transaction_date,
+                        SUM(it.quantity_change) as daily_change
+                    FROM inventory_transactions it
+                    JOIN products p ON it.product_id = p.product_id
+                    WHERE p.sku = %s 
+                    AND it.warehouse_id = %s 
+                    AND it.transaction_timestamp >= CURRENT_DATE - INTERVAL '%s days'
+                    AND it.status = 'confirmed'
+                    GROUP BY DATE(it.transaction_timestamp)
+                    ORDER BY transaction_date ASC
+                ),
+                running_totals AS (
+                    SELECT 
+                        transaction_date,
+                        SUM(daily_change) OVER (ORDER BY transaction_date) as cumulative_change
+                    FROM daily_transactions
+                )
+                SELECT 
+                    transaction_date as history_date,
+                    cumulative_change as stock_level
+                FROM running_totals
+                ORDER BY transaction_date ASC
+            """
+            
+            results = db.execute_query(fallback_query, (item_id, warehouse_id, days))
+        
+        # Convert to list of dictionaries with date strings
+        history_data = []
+        for row in results:
+            history_data.append({
+                'date': row['history_date'].strftime('%Y-%m-%d'),
+                'stock_level': row['stock_level']
+            })
+        
+        return history_data
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch inventory history: {str(e)}")
+
+
 @router.get("/alerts/kpi", response_model=StockManagementAlertKPI)
 async def get_stock_alerts_kpi():
     """Get KPI metrics for stock management alerts."""
