@@ -1,0 +1,48 @@
+# This is a Databricks asset bundle definition for the Smart Stock application.
+# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
+bundle:
+  name: smart_stock
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog_name:
+    description: The catalog name to use for the Smart Stock application.
+    default: smart_stock
+  lakebase_instance_name:
+    description: The name of the Lakebase instance to use for the Smart Stock application.
+    default: smart-stock-db
+
+targets:
+  dev:
+    # Development mode creates a development copy with prefixed resources
+    # and paused job schedules/triggers
+    mode: development
+    default: true
+    variables:
+      catalog_name: smart_stock
+    workspace:
+      host: https://dbc-ea2c343f-6f56.cloud.databricks.com/
+    permissions:
+      - user_name: lars.liahagen@databricks.com
+        level: CAN_MANAGE
+      - user_name: nam.nguyen@databricks.com
+        level: CAN_MANAGE
+      - user_name: fabien.contaminard@databricks.com
+        level: CAN_MANAGE
+
+  prod:
+    mode: production
+    variables:
+      catalog_name: smart_stock
+    workspace:
+      host: https://dbc-ea2c343f-6f56.cloud.databricks.com/
+      root_path: /Shared/smart_stock
+    permissions:
+      - user_name: lars.liahagen@databricks.com
+        level: CAN_MANAGE
+      - user_name: nam.nguyen@databricks.com
+        level: CAN_MANAGE
+      - user_name: fabien.contaminard@databricks.com
+        level: CAN_MANAGE
