@@ -14,9 +14,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import Pagination, { PaginationMeta } from '@/components/ui/pagination';
 import {
-  AlertTriangle, Package, TrendingUp, Clock, Truck,
-  CheckCircle, Factory, ArrowUp, ArrowDown,
-  Activity, ShoppingCart, Loader2, ArrowUpDown, ChevronUp, ChevronDown
+  AlertTriangle, Package, TrendingUp, TrendingDown, Clock, Truck,
+  CheckCircle, Factory, ArrowUp, ArrowDown, ArrowRight,
+  Activity, ShoppingCart, Loader2, ArrowUpDown, ChevronUp, ChevronDown, RefreshCw, BarChart3
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client/client';
 import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse } from '@/fastapi_client';
@@ -30,7 +30,13 @@ import { getTransactionStatusStyle, getInventoryStatusStyle, formatStatusText } 
 // Elena's KPIs
 interface ElenaKPIs {
   onTimeProductionRate: number;
+  onTimeProductionRatePrev: number;
+  onTimeProductionChange: number;
+  onTimeProductionTrend: string;
   inventoryTurnoverRatio: number;
+  inventoryTurnoverPrev: number;
+  inventoryTurnoverChange: number;
+  inventoryTurnoverTrend: string;
   expeditedShipmentsCost: number;
   daysOfStockOnHand: number;
 }
@@ -51,7 +57,13 @@ const SmartStockDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('transactions');
   const [kpis, setKpis] = useState<ElenaKPIs>({
     onTimeProductionRate: 94.5,
+    onTimeProductionRatePrev: 92.3,
+    onTimeProductionChange: 2.2,
+    onTimeProductionTrend: '↑',
     inventoryTurnoverRatio: 8.2,
+    inventoryTurnoverPrev: 7.8,
+    inventoryTurnoverChange: 0.4,
+    inventoryTurnoverTrend: '↑',
     expeditedShipmentsCost: 12500,
     daysOfStockOnHand: 18
   });
@@ -61,6 +73,11 @@ const SmartStockDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [forecastLoading, setForecastLoading] = useState(false);
+  const [kpisLoading, setKpisLoading] = useState(false);
+  const [otprLoading, setOtprLoading] = useState(false);
+  const [turnoverLoading, setTurnoverLoading] = useState(false);
+  const [expeditedLoading, setExpeditedLoading] = useState(false);
+  const [daysOfStockLoading, setDaysOfStockLoading] = useState(false);
   const [transactionKpi, setTransactionKpi] = useState<TransactionManagementKPI | null>(null);
   const [alertCounts, setAlertCounts] = useState({ critical: 0, warning: 0, total: 0 });
   type ForecastSortKey = 'severity' | 'stock' | 'forecast' | 'product';
@@ -210,27 +227,144 @@ const SmartStockDashboard: React.FC = () => {
   };
 
   const loadKpis = async () => {
+    console.log('loadKpis called - VERSION 2.0 WITH DB VIEWS - starting to load KPIs...');
+    setKpisLoading(true);
     try {
       // Load KPIs
       const kpiResponse = await apiClient.getTransactionKpi();
       if (kpiResponse) {
         setTransactionKpi(kpiResponse);
-
-        // Update Elena's KPIs based on actual data
-        const totalTransactions = kpiResponse.total_transactions || 0;
-        const confirmedAndDelivered = (kpiResponse.confirmed_transactions || 0) +
-                                     (kpiResponse.delivered_transactions || 0);
-
-        if (totalTransactions > 0) {
-          setKpis(prev => ({
-            ...prev,
-            onTimeProductionRate: Math.min(99, (confirmedAndDelivered / totalTransactions) * 100),
-            daysOfStockOnHand: Math.floor(Math.random() * 5) + 16 // Simulated based on activity
-          }));
-        }
       }
+
+      // Load OTPR metrics from database view
+      console.log('Fetching OTPR data...');
+      try {
+        const response = await fetch('/api/otpr/');
+        console.log('OTPR response status:', response.status);
+        if (response.ok) {
+          const otprData = await response.json();
+          console.log('OTPR Data from API:', otprData);
+          setKpis(prev => {
+            const newKpis = {
+              ...prev,
+              onTimeProductionRate: otprData.otpr_last_30d ?? 94.5,
+              onTimeProductionRatePrev: otprData.otpr_prev_30d ?? 92.3,
+              onTimeProductionChange: otprData.change_ppt ?? 2.2,
+              onTimeProductionTrend: otprData.trend ?? '↑'
+            };
+            console.log('Updated KPIs after OTPR:', newKpis);
+            return newKpis;
+          });
+        }
+      } catch (otprError) {
+        console.error('Error loading OTPR metrics:', otprError);
+      }
+
+      // Load Inventory Turnover metrics from database view
+      console.log('Fetching Inventory Turnover data...');
+      try {
+        const response = await fetch('/api/inventory-turnover/');
+        console.log('Inventory Turnover response status:', response.status);
+        if (response.ok) {
+          const turnoverData = await response.json();
+          console.log('Inventory Turnover Data from API:', turnoverData);
+          const currentTurnover = turnoverData.overall_inventory_turnover ?? 8.2;
+
+          setKpis(prev => {
+            const newKpis = {
+              ...prev,
+              inventoryTurnoverRatio: currentTurnover,
+              inventoryTurnoverPrev: 0,
+              inventoryTurnoverChange: 0,
+              inventoryTurnoverTrend: '→',
+              daysOfStockOnHand: turnoverData.overall_days_on_hand ?? 18
+            };
+            console.log('Updated KPIs after Inventory Turnover:', newKpis);
+            return newKpis;
+          });
+        }
+      } catch (turnoverError) {
+        console.error('Error loading Inventory Turnover metrics:', turnoverError);
+      }
+
+      // Transaction KPI is already set above, no need to override anything here
     } catch (error) {
       console.error('Error loading KPIs:', error);
+    } finally {
+      setKpisLoading(false);
+    }
+  };
+
+  const refreshOTPR = async () => {
+    setOtprLoading(true);
+    try {
+      const response = await fetch('/api/otpr/');
+      if (response.ok) {
+        const otprData = await response.json();
+        setKpis(prev => ({
+          ...prev,
+          onTimeProductionRate: otprData.otpr_last_30d ?? 94.5,
+          onTimeProductionRatePrev: otprData.otpr_prev_30d ?? 92.3,
+          onTimeProductionChange: otprData.change_ppt ?? 2.2,
+          onTimeProductionTrend: otprData.trend ?? '↑'
+        }));
+      }
+    } catch (error) {
+      console.error('Error refreshing OTPR:', error);
+    } finally {
+      setOtprLoading(false);
+    }
+  };
+
+  const refreshInventoryTurnover = async () => {
+    setTurnoverLoading(true);
+    try {
+      const response = await fetch('/api/inventory-turnover/');
+      if (response.ok) {
+        const turnoverData = await response.json();
+        const currentTurnover = turnoverData.overall_inventory_turnover ?? 8.2;
+        setKpis(prev => ({
+          ...prev,
+          inventoryTurnoverRatio: currentTurnover,
+          daysOfStockOnHand: turnoverData.overall_days_on_hand ?? 18
+        }));
+      }
+    } catch (error) {
+      console.error('Error refreshing Inventory Turnover:', error);
+    } finally {
+      setTurnoverLoading(false);
+    }
+  };
+
+  const refreshExpeditedCosts = async () => {
+    setExpeditedLoading(true);
+    try {
+      // Simulated refresh for expedited costs
+      // In production, this would fetch from an actual endpoint
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Keep the same value for now
+    } catch (error) {
+      console.error('Error refreshing expedited costs:', error);
+    } finally {
+      setExpeditedLoading(false);
+    }
+  };
+
+  const refreshDaysOfStock = async () => {
+    setDaysOfStockLoading(true);
+    try {
+      const response = await fetch('/api/inventory-turnover/');
+      if (response.ok) {
+        const turnoverData = await response.json();
+        setKpis(prev => ({
+          ...prev,
+          daysOfStockOnHand: turnoverData.overall_days_on_hand ?? 18
+        }));
+      }
+    } catch (error) {
+      console.error('Error refreshing days of stock:', error);
+    } finally {
+      setDaysOfStockLoading(false);
     }
   };
 
@@ -446,28 +580,122 @@ const SmartStockDashboard: React.FC = () => {
       {/* KPI Cards - Elena's Metrics */}
       <div className="container mx-auto px-4 py-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card className="border-green-200 bg-green-50">
+          <Card className={`${
+            kpis.onTimeProductionChange > 0 ? 'border-green-200 bg-green-50' :
+            kpis.onTimeProductionChange < 0 ? 'border-red-200 bg-red-50' :
+            'border-gray-200 bg-gray-50'
+          }`}>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-green-900">
-                On-Time Production Rate
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className={`text-sm font-medium ${
+                  kpis.onTimeProductionChange > 0 ? 'text-green-900' :
+                  kpis.onTimeProductionChange < 0 ? 'text-red-900' :
+                  'text-gray-900'
+                }`}>
+                  On-Time Production Rate
+                </CardTitle>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={refreshOTPR}
+                    disabled={otprLoading}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="Refresh OTPR"
+                  >
+                    {otprLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 text-gray-600 hover:text-gray-800" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('analytics')}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="View Analytics"
+                  >
+                    <BarChart3 className="w-4 h-4 text-gray-600 hover:text-gray-800" />
+                  </button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold text-green-700">
-                  {kpis.onTimeProductionRate.toFixed(1)}%
-                </span>
-                <CheckCircle className="w-5 h-5 text-green-600" />
+                <div>
+                  <span className={`text-2xl font-bold ${
+                    kpis.onTimeProductionChange > 0 ? 'text-green-700' :
+                    kpis.onTimeProductionChange < 0 ? 'text-red-700' :
+                    'text-gray-700'
+                  }`}>
+                    {kpisLoading ? (
+                      <span className="inline-flex items-center">
+                        <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                        Updating...
+                      </span>
+                    ) : (
+                      `${kpis.onTimeProductionRate.toFixed(1)}%`
+                    )}
+                  </span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`text-sm font-medium flex items-center ${
+                      kpis.onTimeProductionChange > 0 ? 'text-green-600' :
+                      kpis.onTimeProductionChange < 0 ? 'text-red-600' :
+                      'text-gray-600'
+                    }`}>
+                      <span className="mr-1">{kpis.onTimeProductionTrend}</span>
+                      {kpis.onTimeProductionChange >= 0 ? '+' : ''}{kpis.onTimeProductionChange.toFixed(1)}%
+                    </span>
+                    <span className="text-xs text-gray-500">vs prev 30 days</span>
+                  </div>
+                </div>
+                {kpis.onTimeProductionChange > 0 ? (
+                  <TrendingUp className="w-5 h-5 text-green-600" />
+                ) : kpis.onTimeProductionChange < 0 ? (
+                  <TrendingDown className="w-5 h-5 text-red-600" />
+                ) : (
+                  <ArrowRight className="w-5 h-5 text-gray-600" />
+                )}
               </div>
-              <Progress value={kpis.onTimeProductionRate} className="mt-2" />
+              <Progress
+                value={kpis.onTimeProductionRate}
+                className={`mt-2 ${
+                  kpis.onTimeProductionChange > 0 ? '[&>div]:bg-green-600' :
+                  kpis.onTimeProductionChange < 0 ? '[&>div]:bg-red-600' :
+                  '[&>div]:bg-gray-600'
+                }`}
+              />
+              <p className="text-xs text-gray-600 mt-2">
+                Previous 30 days: {kpis.onTimeProductionRatePrev.toFixed(1)}%
+              </p>
             </CardContent>
           </Card>
 
           <Card className="border-blue-200 bg-blue-50">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-blue-900">
-                Inventory Turnover
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-blue-900">
+                  Inventory Turnover
+                </CardTitle>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={refreshInventoryTurnover}
+                    disabled={turnoverLoading}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="Refresh Inventory Turnover"
+                  >
+                    {turnoverLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 text-gray-600 hover:text-gray-800" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('analytics')}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="View Analytics"
+                  >
+                    <BarChart3 className="w-4 h-4 text-gray-600 hover:text-gray-800" />
+                  </button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -476,15 +704,38 @@ const SmartStockDashboard: React.FC = () => {
                 </span>
                 <TrendingUp className="w-5 h-5 text-blue-600" />
               </div>
-              <p className="text-xs text-blue-600 mt-1">Target: 8.0x</p>
+              <p className="text-xs text-blue-600 mt-1">Days on hand: {kpis.daysOfStockOnHand}</p>
             </CardContent>
           </Card>
 
           <Card className="border-orange-200 bg-orange-50">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-orange-900">
-                Expedited Costs (MTD)
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-orange-900">
+                  Expedited Costs (MTD)
+                </CardTitle>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={refreshExpeditedCosts}
+                    disabled={expeditedLoading}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="Refresh Expedited Costs"
+                  >
+                    {expeditedLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 text-gray-600 hover:text-gray-800" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('analytics')}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="View Analytics"
+                  >
+                    <BarChart3 className="w-4 h-4 text-gray-600 hover:text-gray-800" />
+                  </button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -499,9 +750,32 @@ const SmartStockDashboard: React.FC = () => {
 
           <Card className="border-purple-200 bg-purple-50">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-purple-900">
-                Days of Stock
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium text-purple-900">
+                  Days of Stock
+                </CardTitle>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={refreshDaysOfStock}
+                    disabled={daysOfStockLoading}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="Refresh Days of Stock"
+                  >
+                    {daysOfStockLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 text-gray-600 hover:text-gray-800" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('analytics')}
+                    className="p-1 hover:bg-white/50 rounded transition-colors"
+                    title="View Analytics"
+                  >
+                    <BarChart3 className="w-4 h-4 text-gray-600 hover:text-gray-800" />
+                  </button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
@@ -519,7 +793,7 @@ const SmartStockDashboard: React.FC = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="transactions">Inventory Transactions</TabsTrigger>
-            <TabsTrigger value="warehouse">Warehouse Status</TabsTrigger>
+            <TabsTrigger value="analytics">Inventory Analytics</TabsTrigger>
             <TabsTrigger value="forecast">Inventory Forecast</TabsTrigger>
           </TabsList>
 
@@ -615,58 +889,53 @@ const SmartStockDashboard: React.FC = () => {
             </Card>
           </TabsContent>
 
-          {/* Warehouse Status Tab */}
-          <TabsContent value="warehouse" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {warehouses.map((warehouse) => (
-                <Card key={warehouse.name}>
-                  <CardHeader>
-                    <CardTitle className="text-lg">{warehouse.name}</CardTitle>
-                    <CardDescription>{warehouse.location}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Capacity Used</span>
-                        <span className="font-medium">{warehouse.capacityUsed}%</span>
-                      </div>
-                      <Progress value={warehouse.capacityUsed} />
+          {/* Analytics Tab with Databricks AI/BI Dashboard */}
+          <TabsContent value="analytics" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Inventory Analytics Dashboard</CardTitle>
+                <CardDescription>
+                  Real-time analytics and insights powered by Databricks AI/BI
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                {/*
+                  IMPORTANT: Replace the src URL with your actual Databricks dashboard embed URL
 
-                      <div className="grid grid-cols-2 gap-2 pt-2">
-                        <div>
-                          <p className="text-xs text-gray-500">Inbound Units</p>
-                          <p className="font-semibold text-green-600">+{warehouse.inboundUnits.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Sales Units</p>
-                          <p className="font-semibold text-red-600">-{warehouse.salesUnits.toLocaleString()}</p>
-                        </div>
-                      </div>
+                  To get the embed URL:
+                  1. Go to your Databricks workspace
+                  2. Navigate to your AI/BI dashboard
+                  3. Click on the share/embed button
+                  4. Copy the embed URL
+                  5. Replace the placeholder URL below
 
-                      <div className="pt-2 border-t">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Net Movement</span>
-                          <span className={`font-bold ${
-                            (warehouse.inboundUnits - warehouse.salesUnits) >= 0
-                              ? 'text-green-600'
-                              : 'text-red-600'
-                          }`}>
-                            {(warehouse.inboundUnits - warehouse.salesUnits) > 0 ? '+' : ''}
-                            {(warehouse.inboundUnits - warehouse.salesUnits).toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
+                  The URL format should be like:
+                  https://<workspace>.cloud.databricks.com/embed/dashboards/<dashboard-id>
 
-                      <div className="text-sm text-gray-600 space-y-1">
-                        <p>Active Products: {warehouse.activeProducts}</p>
-                        <p>Total Transactions: {warehouse.transactionCount}</p>
-                        <p>Last Audit: {warehouse.lastAudit}</p>
-                      </div>
+                  You may also need to add authentication token if required:
+                  https://<workspace>.cloud.databricks.com/embed/dashboards/<dashboard-id>?token=<token>
+                */}
+                <div className="relative w-full" style={{ height: '800px' }}>
+                  <iframe
+                    src="https://dbc-ea2c343f-6f56.cloud.databricks.com/embed/dashboardsv3/01f09a302c7d1be385cb0a98d6b1d08a?o=3813697403783275"
+                    title="Databricks Analytics Dashboard"
+                    className="absolute top-0 left-0 w-full h-full border-0"
+                    allowFullScreen
+                    loading="lazy"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                  />
+                  {/* Fallback message if iframe doesn't load */}
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-50 -z-10">
+                    <div className="text-center">
+                      <p className="text-gray-600 mb-2">Dashboard loading...</p>
+                      <p className="text-sm text-gray-500">
+                        If the dashboard doesn't appear, please check your Databricks dashboard ID and permissions.
+                      </p>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Inventory Forecast Tab */}
