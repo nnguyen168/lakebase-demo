@@ -210,6 +210,7 @@ class TransactionResponse(BaseModel):
     transaction_type: str
     transaction_timestamp: datetime
     status: TransactionStatus
+    notes: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -319,3 +320,15 @@ class PaginatedResponse(BaseModel, Generic[T]):
     """Generic paginated response wrapper."""
     items: List[T]
     pagination: PaginationMeta
+
+
+class BulkStatusUpdateRequest(BaseModel):
+    """Request model for bulk status update."""
+    transaction_ids: List[int]
+    status: TransactionStatus
+
+
+class BulkStatusUpdateResponse(BaseModel):
+    """Response model for bulk status update."""
+    updated_count: int
+    message: str

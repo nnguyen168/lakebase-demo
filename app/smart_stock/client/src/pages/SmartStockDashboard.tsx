@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -26,7 +27,8 @@ import Pagination, { PaginationMeta } from '@/components/ui/pagination';
 import {
   AlertTriangle, Package, TrendingUp, TrendingDown, Clock, Truck,
   CheckCircle, Factory, ArrowUp, ArrowDown, ArrowRight,
-  Activity, ShoppingCart, Loader2, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw, BarChart3, Filter, X
+  Activity, ShoppingCart, Loader2, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw, BarChart3, Filter, X,
+  Trash2, Edit3
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client/client';
 import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse, Product, Warehouse, TransactionStatus, TransactionType } from '@/fastapi_client';
@@ -38,9 +40,18 @@ import { useUserInfo } from '@/hooks/useUserInfo';
 import { getTransactionStatusStyle, getInventoryStatusStyle, formatStatusText } from '@/lib/status-utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 // Elena's KPIs
 interface ElenaKPIs {
@@ -69,6 +80,7 @@ interface WarehouseData {
 
 const SmartStockDashboard: React.FC = () => {
   const { displayName, role } = useUserInfo();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('transactions');
   const [kpis, setKpis] = useState<ElenaKPIs>({
     onTimeProductionRate: 94.5,
@@ -103,6 +115,13 @@ const SmartStockDashboard: React.FC = () => {
   const [selectedTransactionTypes, setSelectedTransactionTypes] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<Date | null>(null);
   const [dateTo, setDateTo] = useState<Date | null>(null);
+
+  // Selection state for Gmail-like checkbox functionality
+  const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
+
+  // Status change modal state
+  const [statusChangeModalOpen, setStatusChangeModalOpen] = useState(false);
+  const [targetStatus, setTargetStatus] = useState<string>('confirmed');
   const [showFilters, setShowFilters] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [shouldReloadAfterClear, setShouldReloadAfterClear] = useState(false);
@@ -563,7 +582,42 @@ const SmartStockDashboard: React.FC = () => {
 
   // Pagination handlers
   const handleTransactionsPageChange = (offset: number, limit: number) => {
+    // Clear selection when changing pages
+    setSelectedTransactions(new Set());
     loadTransactions(offset, limit);
+  };
+
+  // Selection handlers
+  const handleSelectTransaction = (transactionId: number) => {
+    const newSelection = new Set(selectedTransactions);
+    if (newSelection.has(transactionId)) {
+      newSelection.delete(transactionId);
+    } else {
+      newSelection.add(transactionId);
+    }
+    setSelectedTransactions(newSelection);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTransactions.size === transactions.length && transactions.length > 0) {
+      // If all are selected, deselect all
+      setSelectedTransactions(new Set());
+    } else {
+      // Select all transactions on current page
+      const allIds = new Set(transactions.map(t => t.transaction_id));
+      setSelectedTransactions(allIds);
+    }
+  };
+
+  const isAllSelected = () => {
+    if (transactions.length === 0) return false;
+    return transactions.every(t => selectedTransactions.has(t.transaction_id));
+  };
+
+  const isIndeterminate = () => {
+    if (transactions.length === 0) return false;
+    const selectedCount = transactions.filter(t => selectedTransactions.has(t.transaction_id)).length;
+    return selectedCount > 0 && selectedCount < transactions.length;
   };
 
   const handleForecastPageChange = (offset: number, limit: number) => {
@@ -906,6 +960,11 @@ const SmartStockDashboard: React.FC = () => {
                     <CardTitle>Inventory Transactions</CardTitle>
                     <CardDescription className="mt-1">
                       Real-time view of all inventory movements across warehouses
+                      {selectedTransactions.size > 0 && (
+                        <span className="ml-2 text-blue-600 font-medium">
+                          • {selectedTransactions.size} selected
+                        </span>
+                      )}
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
@@ -933,6 +992,59 @@ const SmartStockDashboard: React.FC = () => {
                     <TransactionManagement onTransactionAdded={loadDashboardData} />
                   </div>
                 </div>
+
+                {/* Selection Toolbar */}
+                {selectedTransactions.size > 0 && (
+                  <div className="mt-4 border rounded-lg p-3 bg-blue-50 border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-blue-900">
+                          {selectedTransactions.size} transaction{selectedTransactions.size !== 1 ? 's' : ''} selected
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-700 hover:bg-blue-100"
+                          onClick={() => {
+                            setStatusChangeModalOpen(true);
+                            setTargetStatus('confirmed');
+                          }}
+                        >
+                          <Edit3 className="h-4 w-4 mr-1" />
+                          Change Status
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() => {
+                            // TODO: Implement delete functionality
+                            toast({
+                              title: "Delete Feature",
+                              description: "Delete functionality is not yet implemented",
+                              variant: "destructive",
+                            });
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </Button>
+                        <div className="w-px h-6 bg-blue-200" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-700 hover:bg-blue-100"
+                          onClick={() => setSelectedTransactions(new Set())}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Clear selection
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Collapsible Filters Panel */}
                 {showFilters && (
@@ -1348,9 +1460,20 @@ const SmartStockDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <Table>
+                <Table className="select-none">
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isAllSelected()}
+                            onCheckedChange={handleSelectAll}
+                            aria-label="Select all"
+                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 data-[state=indeterminate]:bg-blue-600/50 data-[state=indeterminate]:border-blue-600"
+                            data-state={isIndeterminate() ? 'indeterminate' : isAllSelected() ? 'checked' : 'unchecked'}
+                          />
+                        </div>
+                      </TableHead>
                       <TableHead className="w-[50px]">Type</TableHead>
                       <TableHead>Transaction #</TableHead>
                       <TableHead>
@@ -1381,6 +1504,7 @@ const SmartStockDashboard: React.FC = () => {
                       </TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Notes</TableHead>
                       <TableHead>
                         <button
                           className="flex items-center gap-1 hover:text-gray-900"
@@ -1399,7 +1523,7 @@ const SmartStockDashboard: React.FC = () => {
                   <TableBody>
                     {transactionsLoading ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
+                        <TableCell colSpan={9} className="h-24 text-center">
                           <div className="flex items-center justify-center">
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                             Loading transactions...
@@ -1408,7 +1532,21 @@ const SmartStockDashboard: React.FC = () => {
                       </TableRow>
                     ) : (
                       transactions.map((transaction) => (
-                        <TableRow key={transaction.transaction_id}>
+                        <TableRow
+                          key={transaction.transaction_id}
+                          className={`hover:bg-gray-50 transition-colors cursor-pointer ${
+                            selectedTransactions.has(transaction.transaction_id) ? 'bg-blue-50 hover:bg-blue-100' : ''
+                          }`}
+                          onClick={() => handleSelectTransaction(transaction.transaction_id)}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedTransactions.has(transaction.transaction_id)}
+                              onCheckedChange={() => handleSelectTransaction(transaction.transaction_id)}
+                              aria-label={`Select transaction ${transaction.transaction_number}`}
+                              className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                            />
+                          </TableCell>
                           <TableCell>{getTransactionIcon(transaction.transaction_type)}</TableCell>
                           <TableCell className="font-mono text-sm">{transaction.transaction_number}</TableCell>
                           <TableCell className="font-medium">{transaction.product}</TableCell>
@@ -1421,6 +1559,9 @@ const SmartStockDashboard: React.FC = () => {
                             </span>
                           </TableCell>
                           <TableCell>{getStatusBadge(transaction.status)}</TableCell>
+                          <TableCell className="text-sm text-gray-600 max-w-xs truncate" title={transaction.notes || ''}>
+                            {transaction.notes || '-'}
+                          </TableCell>
                           <TableCell className="text-sm text-gray-600">
                             {new Date(transaction.transaction_timestamp).toLocaleDateString('en-US', {
                               year: 'numeric',
@@ -1713,6 +1854,78 @@ const SmartStockDashboard: React.FC = () => {
           }
         }}
       />
+
+      {/* Status Change Modal */}
+      <Dialog open={statusChangeModalOpen} onOpenChange={setStatusChangeModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Transaction Status</DialogTitle>
+            <DialogDescription>
+              Update the status for {selectedTransactions.size} selected transaction{selectedTransactions.size !== 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="status-select" className="mb-2 block">
+              Select new status:
+            </Label>
+            <Select value={targetStatus} onValueChange={setTargetStatus}>
+              <SelectTrigger id="status-select">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="processing">Processing</SelectItem>
+                <SelectItem value="shipped">Shipped</SelectItem>
+                <SelectItem value="delivered">Delivered</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStatusChangeModalOpen(false);
+                setTargetStatus('confirmed');
+              }}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  const transactionIds = Array.from(selectedTransactions);
+
+                  const response = await apiClient.transactions.bulkUpdateStatus({
+                    transaction_ids: transactionIds,
+                    status: targetStatus as TransactionStatus
+                  });
+
+                  toast({
+                    title: "Status Updated",
+                    description: response.message,
+                  });
+
+                  setStatusChangeModalOpen(false);
+                  setSelectedTransactions(new Set());
+                  // Reload transactions to show updated status
+                  loadTransactions(transactionsPagination.offset, transactionsPagination.limit);
+                } catch (error) {
+                  console.error('Error updating status:', error);
+                  toast({
+                    title: "Error",
+                    description: error instanceof Error ? error.message : "Failed to update transaction status",
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              Change Status
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

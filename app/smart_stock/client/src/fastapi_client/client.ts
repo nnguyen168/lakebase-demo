@@ -12,6 +12,16 @@ export const apiClient = {
   updateInventoryForecast: InventoryService.updateInventoryForecastApiInventoryForecastPut,
 
   // Transaction methods
+  transactions: {
+    getTransactions: TransactionsService.getTransactionsApiTransactionsGet,
+    getTransactionKpi: TransactionsService.getTransactionKpiApiTransactionsKpiGet,
+    getTransaction: TransactionsService.getTransactionApiTransactionsTransactionIdGet,
+    createTransaction: TransactionsService.createTransactionApiTransactionsPost,
+    updateTransaction: TransactionsService.updateTransactionApiTransactionsTransactionIdPut,
+    deleteTransaction: TransactionsService.deleteTransactionApiTransactionsTransactionIdDelete,
+    bulkUpdateStatus: TransactionsService.bulkUpdateStatusApiTransactionsBulkStatusPut,
+  },
+  // Keep backward compatibility
   getTransactions: TransactionsService.getTransactionsApiTransactionsGet,
   getTransactionKpi: TransactionsService.getTransactionKpiApiTransactionsKpiGet,
   getTransaction: TransactionsService.getTransactionApiTransactionsTransactionIdGet,

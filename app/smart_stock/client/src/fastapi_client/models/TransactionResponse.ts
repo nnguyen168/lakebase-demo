@@ -15,5 +15,6 @@ export type TransactionResponse = {
     transaction_type: string;
     transaction_timestamp: string;
     status: TransactionStatus;
+    notes?: (string | null);
 };
 

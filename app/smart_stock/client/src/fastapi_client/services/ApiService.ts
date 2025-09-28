@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BulkStatusUpdateRequest } from '../models/BulkStatusUpdateRequest';
+import type { BulkStatusUpdateResponse } from '../models/BulkStatusUpdateResponse';
 import type { ForecastStatus } from '../models/ForecastStatus';
 import type { InventoryForecast } from '../models/InventoryForecast';
 import type { InventoryForecastUpdate } from '../models/InventoryForecastUpdate';
@@ -198,6 +200,26 @@ export class ApiService {
             path: {
                 'transaction_id': transactionId,
             },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bulk Update Status
+     * Update status for multiple transactions at once.
+     * @param requestBody
+     * @returns BulkStatusUpdateResponse Successful Response
+     * @throws ApiError
+     */
+    public static bulkUpdateStatusApiTransactionsBulkStatusPut(
+        requestBody: BulkStatusUpdateRequest,
+    ): CancelablePromise<BulkStatusUpdateResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/transactions/bulk-status',
+            body: requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: `Validation Error`,
             },

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from ..models import (
     InventoryTransaction, InventoryTransactionCreate, InventoryTransactionUpdate,
     TransactionResponse, TransactionManagementKPI, TransactionStatus, TransactionType,
-    PaginatedResponse, PaginationMeta
+    PaginatedResponse, PaginationMeta, BulkStatusUpdateRequest, BulkStatusUpdateResponse
 )
 # Use database selector
 from ..db_selector import db
@@ -103,7 +103,8 @@ async def get_transactions(
                 w.name as warehouse,
                 t.transaction_type,
                 t.transaction_timestamp,
-                t.status
+                t.status,
+                t.notes
         """ + base_query + f" ORDER BY {sort_column} {order_direction} LIMIT %s OFFSET %s"
 
         data_params = params + [limit, offset]
@@ -241,6 +242,69 @@ async def create_transaction(transaction: InventoryTransactionCreate):
         raise HTTPException(status_code=500, detail=f"Failed to create transaction: {str(e)}")
 
 
+@router.put("/bulk-status", response_model=BulkStatusUpdateResponse)
+async def bulk_update_status(request: BulkStatusUpdateRequest):
+    """Update status for multiple transactions at once."""
+    try:
+        if not request.transaction_ids:
+            raise HTTPException(status_code=400, detail="No transaction IDs provided")
+
+        # Validate transactions exist and can be updated
+        placeholders = ', '.join(['%s'] * len(request.transaction_ids))
+        check_query = f"""
+            SELECT transaction_id, status
+            FROM inventory_transactions
+            WHERE transaction_id IN ({placeholders})
+        """
+
+        existing_transactions = db.execute_query(check_query, tuple(request.transaction_ids))
+
+        if not existing_transactions:
+            raise HTTPException(status_code=404, detail="No valid transactions found")
+
+        found_ids = {t['transaction_id'] for t in existing_transactions}
+        missing_ids = set(request.transaction_ids) - found_ids
+
+        if missing_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Transactions not found: {list(missing_ids)}"
+            )
+
+        # Check if any transactions are in a final state that can't be changed
+        final_states = ['delivered', 'cancelled']
+        locked_transactions = [
+            t['transaction_id'] for t in existing_transactions
+            if t['status'] in final_states and request.status.value not in final_states
+        ]
+
+        if locked_transactions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot update transactions in final state: {locked_transactions}"
+            )
+
+        # Perform bulk update
+        update_query = f"""
+            UPDATE inventory_transactions
+            SET status = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE transaction_id IN ({placeholders})
+        """
+
+        params = [request.status.value] + request.transaction_ids
+        affected_rows = db.execute_update(update_query, tuple(params))
+
+        return BulkStatusUpdateResponse(
+            updated_count=affected_rows,
+            message=f"Successfully updated {affected_rows} transaction(s) to status '{request.status.value}'"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update transaction status: {str(e)}")
+
+
 @router.put("/{transaction_id}", response_model=InventoryTransaction)
 async def update_transaction(transaction_id: int, transaction_update: InventoryTransactionUpdate):
     """Update an existing transaction."""
@@ -324,3 +388,5 @@ async def delete_transaction(transaction_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to cancel transaction: {str(e)}")
+
+
