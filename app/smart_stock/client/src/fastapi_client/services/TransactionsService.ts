@@ -16,18 +16,28 @@ export class TransactionsService {
     /**
      * Get Transactions
      * Get list of inventory transactions with optional filters and pagination metadata.
-     * @param status Filter by transaction status
-     * @param warehouseId Filter by warehouse ID
-     * @param transactionType Filter by transaction type
+     * @param status Filter by transaction status (multiple values allowed)
+     * @param warehouseId Filter by warehouse ID (multiple values allowed)
+     * @param productId Filter by product ID (multiple values allowed)
+     * @param transactionType Filter by transaction type (multiple values allowed)
+     * @param dateFrom Filter transactions from this date
+     * @param dateTo Filter transactions until this date
+     * @param sortBy Field to sort by (product, warehouse, transaction_timestamp)
+     * @param sortOrder Sort order (asc or desc)
      * @param limit Maximum number of transactions to return
      * @param offset Number of transactions to skip
      * @returns PaginatedResponse_TransactionResponse_ Successful Response
      * @throws ApiError
      */
     public static getTransactionsApiTransactionsGet(
-        status?: (TransactionStatus | null),
-        warehouseId?: (number | null),
-        transactionType?: (TransactionType | null),
+        status?: (Array<TransactionStatus> | null),
+        warehouseId?: (Array<number> | null),
+        productId?: (Array<number> | null),
+        transactionType?: (Array<TransactionType> | null),
+        dateFrom?: (string | null),
+        dateTo?: (string | null),
+        sortBy?: (string | null),
+        sortOrder?: (string | null),
         limit: number = 100,
         offset?: number,
     ): CancelablePromise<PaginatedResponse_TransactionResponse_> {
@@ -37,7 +47,12 @@ export class TransactionsService {
             query: {
                 'status': status,
                 'warehouse_id': warehouseId,
+                'product_id': productId,
                 'transaction_type': transactionType,
+                'date_from': dateFrom,
+                'date_to': dateTo,
+                'sort_by': sortBy,
+                'sort_order': sortOrder,
                 'limit': limit,
                 'offset': offset,
             },

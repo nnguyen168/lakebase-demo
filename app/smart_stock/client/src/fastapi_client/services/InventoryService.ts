@@ -5,6 +5,7 @@
 import type { ForecastStatus } from '../models/ForecastStatus';
 import type { InventoryForecast } from '../models/InventoryForecast';
 import type { InventoryForecastUpdate } from '../models/InventoryForecastUpdate';
+import type { InventoryTurnoverMetrics } from '../models/InventoryTurnoverMetrics';
 import type { PaginatedResponse_InventoryForecastResponse_ } from '../models/PaginatedResponse_InventoryForecastResponse_';
 import type { StockManagementAlertKPI } from '../models/StockManagementAlertKPI';
 import type { CancelablePromise } from '../core/CancelablePromise';
@@ -60,7 +61,7 @@ export class InventoryService {
         itemId: string,
         warehouseId: number,
         days: number = 30,
-    ): CancelablePromise<Array<{date: string; stock_level: number}>> {
+    ): CancelablePromise<Array<Record<string, any>>> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/inventory/history',
@@ -109,6 +110,21 @@ export class InventoryService {
             errors: {
                 422: `Validation Error`,
             },
+        });
+    }
+    /**
+     * Get Inventory Turnover Metrics
+     * Get Inventory Turnover metrics from the inventory_turnover view.
+     *
+     * Returns the overall inventory turnover rate and related metrics.
+     * This endpoint reads real-time metrics from the database view.
+     * @returns InventoryTurnoverMetrics Successful Response
+     * @throws ApiError
+     */
+    public static getInventoryTurnoverMetricsApiInventoryTurnoverGet(): CancelablePromise<InventoryTurnoverMetrics> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/inventory-turnover/',
         });
     }
 }

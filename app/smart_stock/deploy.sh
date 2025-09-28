@@ -222,6 +222,12 @@ cd ..
 echo "✅ Frontend build complete"
 print_timing "Frontend build completed"
 
+# Copy built files to root build directory
+echo "📁 Copying frontend build to root build directory..."
+rm -rf build/*
+cp -r client/build/* build/
+echo "✅ Frontend files copied to build/"
+
 # Create workspace directory and upload source
 print_timing "Starting workspace setup"
 echo "📂 Creating workspace directory..."

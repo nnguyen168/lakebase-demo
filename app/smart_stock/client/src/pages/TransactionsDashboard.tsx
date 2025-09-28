@@ -14,12 +14,21 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { DatePicker } from '@/components/ui/date-picker';
+import { Label } from '@/components/ui/label';
+import {
   AlertTriangle, Package, TrendingUp, Clock, Truck,
   CheckCircle, ArrowUp, ArrowDown, Factory, Battery,
-  Settings, Zap, Activity, BarChart3, Package2, Loader2
+  Settings, Zap, Activity, BarChart3, Package2, Loader2, Filter, X
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client/client';
-import { TransactionResponse, TransactionManagementKPI } from '@/fastapi_client';
+import { TransactionResponse, TransactionManagementKPI, Product, Warehouse } from '@/fastapi_client';
 import { useUserInfo } from '@/hooks/useUserInfo';
 import { getTransactionStatusStyle, formatStatusText } from '@/lib/status-utils';
 import Pagination, { PaginationMeta } from '@/components/ui/pagination';
@@ -33,7 +42,17 @@ const TransactionsDashboard: React.FC = () => {
   const [transactionsLoading, setTransactionsLoading] = useState(false);
   const [productSummary, setProductSummary] = useState<Map<string, { inbound: number, sales: number, net: number }>>(new Map());
   const [warehouseSummary, setWarehouseSummary] = useState<Map<string, { inbound: number, sales: number, transactions: number }>>(new Map());
-  
+
+  // Filter state
+  const [products, setProducts] = useState<Product[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<string>('');
+  const [selectedWarehouse, setSelectedWarehouse] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+  const [showFilters, setShowFilters] = useState(false);
+
   // Pagination state
   const [transactionsPagination, setTransactionsPagination] = useState<PaginationMeta>({
     total: 0,
@@ -45,6 +64,7 @@ const TransactionsDashboard: React.FC = () => {
 
   useEffect(() => {
     loadDashboardData();
+    loadFilterOptions();
   }, []);
 
   const loadDashboardData = async () => {
@@ -59,15 +79,37 @@ const TransactionsDashboard: React.FC = () => {
     }
   };
 
+  const loadFilterOptions = async () => {
+    try {
+      const [productsResponse, warehousesResponse] = await Promise.all([
+        apiClient.getProducts(),
+        apiClient.getWarehouses()
+      ]);
+
+      if (productsResponse) {
+        setProducts(productsResponse.items || []);
+      }
+      if (warehousesResponse) {
+        setWarehouses(warehousesResponse.items || []);
+      }
+    } catch (error) {
+      console.error('Error loading filter options:', error);
+    }
+  };
+
   const loadTransactions = async (offset: number = 0, limit: number = 25) => {
     try {
       setTransactionsLoading(true);
 
-      // Load transactions with pagination
-      const transactionsResponse = await apiClient.getTransactions(
-        undefined, // status
-        undefined, // warehouseId
+      // Load transactions with pagination and filters - call the service directly with proper parameters
+      const { TransactionsService } = await import('@/fastapi_client/services/TransactionsService');
+      const transactionsResponse = await TransactionsService.getTransactionsApiTransactionsGet(
+        selectedStatus || undefined,
+        selectedWarehouse ? parseInt(selectedWarehouse) : undefined,
+        selectedProduct ? parseInt(selectedProduct) : undefined,
         undefined, // transactionType
+        dateFrom ? dateFrom.toISOString() : undefined,
+        dateTo ? dateTo.toISOString() : undefined,
         limit,
         offset
       );
@@ -132,6 +174,24 @@ const TransactionsDashboard: React.FC = () => {
   // Pagination handler
   const handleTransactionsPageChange = (offset: number, limit: number) => {
     loadTransactions(offset, limit);
+  };
+
+  // Filter handlers
+  const handleApplyFilters = () => {
+    loadTransactions(0, transactionsPagination.limit);
+  };
+
+  const handleClearFilters = () => {
+    setSelectedProduct('');
+    setSelectedWarehouse('');
+    setSelectedStatus('');
+    setDateFrom(undefined);
+    setDateTo(undefined);
+    loadTransactions(0, transactionsPagination.limit);
+  };
+
+  const hasActiveFilters = () => {
+    return selectedProduct || selectedWarehouse || selectedStatus || dateFrom || dateTo;
   };
 
   const getStatusBadge = (status: string) => {
@@ -278,12 +338,125 @@ const TransactionsDashboard: React.FC = () => {
           <TabsContent value="transactions" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Inventory Transactions</CardTitle>
-                <CardDescription>
-                  Real-time view of all inventory movements across warehouses
-                </CardDescription>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Inventory Transactions</CardTitle>
+                    <CardDescription>
+                      Real-time view of all inventory movements across warehouses
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowFilters(!showFilters)}
+                    className="flex items-center gap-2"
+                  >
+                    <Filter className="h-4 w-4" />
+                    {showFilters ? 'Hide Filters' : 'Show Filters'}
+                    {hasActiveFilters() && (
+                      <Badge variant="secondary" className="ml-1">
+                        {[selectedProduct, selectedWarehouse, selectedStatus, dateFrom, dateTo].filter(Boolean).length}
+                      </Badge>
+                    )}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
+                {showFilters && (
+                  <div className="border rounded-lg p-4 mb-4 bg-gray-50">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                      <div>
+                        <Label htmlFor="product-filter" className="text-sm font-medium mb-1">Product</Label>
+                        <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                          <SelectTrigger id="product-filter">
+                            <SelectValue placeholder="All products" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">All products</SelectItem>
+                            {products.map((product) => (
+                              <SelectItem key={product.product_id} value={product.product_id.toString()}>
+                                {product.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="warehouse-filter" className="text-sm font-medium mb-1">Warehouse</Label>
+                        <Select value={selectedWarehouse} onValueChange={setSelectedWarehouse}>
+                          <SelectTrigger id="warehouse-filter">
+                            <SelectValue placeholder="All warehouses" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">All warehouses</SelectItem>
+                            {warehouses.map((warehouse) => (
+                              <SelectItem key={warehouse.warehouse_id} value={warehouse.warehouse_id.toString()}>
+                                {warehouse.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="status-filter" className="text-sm font-medium mb-1">Status</Label>
+                        <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                          <SelectTrigger id="status-filter">
+                            <SelectValue placeholder="All statuses" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">All statuses</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="confirmed">Confirmed</SelectItem>
+                            <SelectItem value="processing">Processing</SelectItem>
+                            <SelectItem value="shipped">Shipped</SelectItem>
+                            <SelectItem value="delivered">Delivered</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="date-from" className="text-sm font-medium mb-1">From Date</Label>
+                        <DatePicker
+                          date={dateFrom}
+                          onSelect={setDateFrom}
+                          placeholder="Start date"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="date-to" className="text-sm font-medium mb-1">To Date</Label>
+                        <DatePicker
+                          date={dateTo}
+                          onSelect={setDateTo}
+                          placeholder="End date"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 mt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleClearFilters}
+                        disabled={!hasActiveFilters()}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Clear Filters
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleApplyFilters}
+                      >
+                        <Filter className="h-4 w-4 mr-1" />
+                        Apply Filters
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <Table>
                   <TableHeader>
                     <TableRow>

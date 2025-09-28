@@ -157,5 +157,8 @@ async def debug_db_test():
 # This static file mount MUST be the last route registered!
 # It catches all unmatched requests and serves the React app.
 # Any routes added after this will be unreachable!
-if os.path.exists('client/build'):
+# Check both possible build locations - production uses 'build', development uses 'client/build'
+if os.path.exists('build'):
+  app.mount('/', StaticFiles(directory='build', html=True), name='static')
+elif os.path.exists('client/build'):
   app.mount('/', StaticFiles(directory='client/build', html=True), name='static')
