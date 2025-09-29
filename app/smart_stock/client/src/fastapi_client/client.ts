@@ -20,6 +20,7 @@ export const apiClient = {
     updateTransaction: TransactionsService.updateTransactionApiTransactionsTransactionIdPut,
     deleteTransaction: TransactionsService.deleteTransactionApiTransactionsTransactionIdDelete,
     bulkUpdateStatus: TransactionsService.bulkUpdateStatusApiTransactionsBulkStatusPut,
+    bulkDelete: TransactionsService.bulkDeleteTransactionsApiTransactionsBulkDeleteDelete,
   },
   // Keep backward compatibility
   getTransactions: TransactionsService.getTransactionsApiTransactionsGet,

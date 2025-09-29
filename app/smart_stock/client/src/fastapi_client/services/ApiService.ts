@@ -2,6 +2,8 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BulkDeleteRequest } from '../models/BulkDeleteRequest';
+import type { BulkDeleteResponse } from '../models/BulkDeleteResponse';
 import type { BulkStatusUpdateRequest } from '../models/BulkStatusUpdateRequest';
 import type { BulkStatusUpdateResponse } from '../models/BulkStatusUpdateResponse';
 import type { ForecastStatus } from '../models/ForecastStatus';
@@ -218,6 +220,26 @@ export class ApiService {
         return __request(OpenAPI, {
             method: 'PUT',
             url: '/api/transactions/bulk-status',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Bulk Delete Transactions
+     * Delete multiple transactions at once.
+     * @param requestBody
+     * @returns BulkDeleteResponse Successful Response
+     * @throws ApiError
+     */
+    public static bulkDeleteTransactionsApiTransactionsBulkDeleteDelete(
+        requestBody: BulkDeleteRequest,
+    ): CancelablePromise<BulkDeleteResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/transactions/bulk-delete',
             body: requestBody,
             mediaType: 'application/json',
             errors: {

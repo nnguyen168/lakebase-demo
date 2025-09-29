@@ -7,6 +7,8 @@ export { CancelablePromise, CancelError } from './core/CancelablePromise';
 export { OpenAPI } from './core/OpenAPI';
 export type { OpenAPIConfig } from './core/OpenAPI';
 
+export type { BulkDeleteRequest } from './models/BulkDeleteRequest';
+export type { BulkDeleteResponse } from './models/BulkDeleteResponse';
 export type { BulkStatusUpdateRequest } from './models/BulkStatusUpdateRequest';
 export type { BulkStatusUpdateResponse } from './models/BulkStatusUpdateResponse';
 export type { ForecastStatus } from './models/ForecastStatus';
