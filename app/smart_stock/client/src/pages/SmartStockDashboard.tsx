@@ -1612,9 +1612,9 @@ const SmartStockDashboard: React.FC = () => {
                   You may also need to add authentication token if required:
                   https://<workspace>.cloud.databricks.com/embed/dashboards/<dashboard-id>?token=<token>
                 */}
-                <div className="relative w-full" style={{ height: '800px' }}>
+                <div className="relative w-full" style={{ height: '600px' }}>
                   <iframe
-                    src="https://dbc-ea2c343f-6f56.cloud.databricks.com/embed/dashboardsv3/01f09a302c7d1be385cb0a98d6b1d08a?o=3813697403783275"
+                    src="https://dbc-ea2c343f-6f56.cloud.databricks.com/embed/dashboardsv3/01f09d04e6c51b14b22b8bcafd1534f5?o=3813697403783275"
                     title="Databricks Analytics Dashboard"
                     className="absolute top-0 left-0 w-full h-full border-0"
                     allowFullScreen
