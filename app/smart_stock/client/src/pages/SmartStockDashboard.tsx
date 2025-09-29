@@ -23,12 +23,13 @@ import {
 } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import Pagination, { PaginationMeta } from '@/components/ui/pagination';
 import {
   AlertTriangle, Package, TrendingUp, TrendingDown, Clock, Truck,
   CheckCircle, Factory, ArrowUp, ArrowDown, ArrowRight,
   Activity, ShoppingCart, Loader2, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw, BarChart3, Filter, X,
-  Trash2, Edit3
+  Trash2, Edit3, Plus, Minus
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client/client';
 import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse, Product, Warehouse, TransactionStatus, TransactionType } from '@/fastapi_client';
@@ -122,7 +123,21 @@ const SmartStockDashboard: React.FC = () => {
   // Status change modal state
   const [statusChangeModalOpen, setStatusChangeModalOpen] = useState(false);
   const [targetStatus, setTargetStatus] = useState<string>('confirmed');
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [createTransactionOpen, setCreateTransactionOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Create transaction form state
+  const [newTransaction, setNewTransaction] = useState({
+    product_id: '',
+    warehouse_id: '',
+    transaction_type: 'inbound' as TransactionType,
+    quantity_change: 0,
+    status: 'pending' as TransactionStatus,
+    notes: ''
+  });
+  const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
+  const [availableWarehouses, setAvailableWarehouses] = useState<Warehouse[]>([]);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [shouldReloadAfterClear, setShouldReloadAfterClear] = useState(false);
   const [transactionKpi, setTransactionKpi] = useState<TransactionManagementKPI | null>(null);
@@ -163,9 +178,36 @@ const SmartStockDashboard: React.FC = () => {
   const [orderSuccessModalOpen, setOrderSuccessModalOpen] = useState(false);
   const [successOrderData, setSuccessOrderData] = useState<any>(null);
 
+  // Fetch products and warehouses for dropdowns
+  const fetchDropdownData = async () => {
+    try {
+      const [productsResponse, warehousesResponse] = await Promise.all([
+        apiClient.getProducts(null, null, 100, 0),
+        apiClient.getWarehouses(100, 0)
+      ]);
+      console.log('Products response:', productsResponse);
+      console.log('Warehouses response:', warehousesResponse);
+      setAvailableProducts(productsResponse.items || []);
+      setAvailableWarehouses(warehousesResponse.items || []);
+    } catch (error) {
+      console.error('Error fetching dropdown data:', error);
+    }
+  };
+
   useEffect(() => {
     loadDashboardData();
     loadFilterOptions();
+    fetchDropdownData();
+
+    // Listen for create transaction event from TransactionManagement
+    const handleOpenCreateTransaction = () => {
+      setCreateTransactionOpen(true);
+    };
+    window.addEventListener('openCreateTransaction', handleOpenCreateTransaction);
+
+    return () => {
+      window.removeEventListener('openCreateTransaction', handleOpenCreateTransaction);
+    };
   }, []);
 
   useEffect(() => {
@@ -1020,12 +1062,7 @@ const SmartStockDashboard: React.FC = () => {
                           size="sm"
                           className="text-red-600 hover:bg-red-50"
                           onClick={() => {
-                            // TODO: Implement delete functionality
-                            toast({
-                              title: "Delete Feature",
-                              description: "Delete functionality is not yet implemented",
-                              variant: "destructive",
-                            });
+                            setDeleteConfirmOpen(true);
                           }}
                         >
                           <Trash2 className="h-4 w-4 mr-1" />
@@ -1612,9 +1649,9 @@ const SmartStockDashboard: React.FC = () => {
                   You may also need to add authentication token if required:
                   https://<workspace>.cloud.databricks.com/embed/dashboards/<dashboard-id>?token=<token>
                 */}
-                <div className="relative w-full" style={{ height: '800px' }}>
+                <div className="relative w-full" style={{ height: '600px' }}>
                   <iframe
-                    src="https://dbc-ea2c343f-6f56.cloud.databricks.com/embed/dashboardsv3/01f09a302c7d1be385cb0a98d6b1d08a?o=3813697403783275"
+                    src="https://dbc-ea2c343f-6f56.cloud.databricks.com/embed/dashboardsv3/01f09d04e6c51b14b22b8bcafd1534f5?o=3813697403783275"
                     title="Databricks Analytics Dashboard"
                     className="absolute top-0 left-0 w-full h-full border-0"
                     allowFullScreen
@@ -1922,6 +1959,347 @@ const SmartStockDashboard: React.FC = () => {
               }}
             >
               Change Status
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Deletion</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedTransactions.size} selected transaction{selectedTransactions.size !== 1 ? 's' : ''}?
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                try {
+                  const transactionIds = Array.from(selectedTransactions);
+
+                  const response = await apiClient.transactions.bulkDelete({
+                    transaction_ids: transactionIds
+                  });
+
+                  toast({
+                    title: "Transactions Deleted",
+                    description: response.message,
+                  });
+
+                  setDeleteConfirmOpen(false);
+                  setSelectedTransactions(new Set());
+                  // Reload transactions to reflect the deletion
+                  loadTransactions(transactionsPagination.offset, transactionsPagination.limit);
+                } catch (error) {
+                  console.error('Error deleting transactions:', error);
+                  toast({
+                    title: "Error",
+                    description: error instanceof Error ? error.message : "Failed to delete transactions",
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              Delete {selectedTransactions.size} Transaction{selectedTransactions.size !== 1 ? 's' : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Transaction Modal */}
+      <Dialog open={createTransactionOpen} onOpenChange={setCreateTransactionOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create New Transaction</DialogTitle>
+            <DialogDescription>
+              Add a new inventory transaction to track product movement
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Transaction Type */}
+            <div className="space-y-2">
+              <Label htmlFor="transaction-type">Transaction Type</Label>
+              <Select
+                value={newTransaction.transaction_type}
+                onValueChange={(value) => {
+                  setNewTransaction({
+                    ...newTransaction,
+                    transaction_type: value as TransactionType,
+                    quantity_change: value === 'sale' ? Math.abs(newTransaction.quantity_change) * -1 : Math.abs(newTransaction.quantity_change)
+                  });
+                }}
+              >
+                <SelectTrigger id="transaction-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inbound">
+                    <div className="flex items-center gap-2">
+                      <ArrowDown className="h-4 w-4 text-green-600" />
+                      <span>Inbound (Stock In)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="sale">
+                    <div className="flex items-center gap-2">
+                      <ArrowUp className="h-4 w-4 text-blue-600" />
+                      <span>Sale (Stock Out)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="adjustment">
+                    <div className="flex items-center gap-2">
+                      <RefreshCw className="h-4 w-4 text-orange-600" />
+                      <span>Adjustment</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Product Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="product">Product *</Label>
+              <Select
+                value={newTransaction.product_id}
+                onValueChange={(value) => setNewTransaction({...newTransaction, product_id: value})}
+              >
+                <SelectTrigger id="product">
+                  <SelectValue placeholder="Select a product" />
+                </SelectTrigger>
+                <SelectContent>
+                  <div className="sticky top-0 p-2 bg-white border-b">
+                    <Input
+                      placeholder="Search products..."
+                      className="h-8"
+                      onChange={(e) => {
+                        // This is for future search implementation
+                        console.log('Search:', e.target.value);
+                      }}
+                    />
+                  </div>
+                  <div className="max-h-[200px] overflow-y-auto">
+                    {availableProducts.map((product) => (
+                      <SelectItem key={product.product_id} value={product.product_id.toString()}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>{product.name}</span>
+                          <Badge variant="outline" className="ml-2">
+                            SKU: {product.sku}
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </div>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Warehouse Selection */}
+            <div className="space-y-2">
+              <Label htmlFor="warehouse">Warehouse *</Label>
+              <Select
+                value={newTransaction.warehouse_id}
+                onValueChange={(value) => setNewTransaction({...newTransaction, warehouse_id: value})}
+              >
+                <SelectTrigger id="warehouse">
+                  <SelectValue placeholder="Select a warehouse" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableWarehouses.map((warehouse) => (
+                    <SelectItem key={warehouse.warehouse_id} value={warehouse.warehouse_id.toString()}>
+                      <div className="flex items-center gap-2">
+                        <Factory className="h-4 w-4 text-gray-500" />
+                        <span>{warehouse.name}</span>
+                        <span className="text-gray-500 text-sm">({warehouse.location})</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Quantity with +/- buttons */}
+            <div className="space-y-2">
+              <Label htmlFor="quantity">
+                Quantity
+                <span className="text-sm text-gray-500 ml-2">
+                  (positive for inbound, negative for sales)
+                </span>
+              </Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    setNewTransaction({
+                      ...newTransaction,
+                      quantity_change: newTransaction.quantity_change - 5
+                    });
+                  }}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+                <Input
+                  id="quantity"
+                  type="number"
+                  className="text-center font-semibold text-lg w-32"
+                  value={newTransaction.quantity_change}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 0;
+                    setNewTransaction({
+                      ...newTransaction,
+                      quantity_change: value
+                    });
+                  }}
+                  placeholder="0"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    setNewTransaction({
+                      ...newTransaction,
+                      quantity_change: newTransaction.quantity_change + 5
+                    });
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="space-y-2">
+              <Label htmlFor="status">Initial Status</Label>
+              <Select
+                value={newTransaction.status}
+                onValueChange={(value) => setNewTransaction({...newTransaction, status: value as TransactionStatus})}
+              >
+                <SelectTrigger id="status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">
+                    <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                      Pending
+                    </Badge>
+                  </SelectItem>
+                  <SelectItem value="confirmed">
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                      Confirmed
+                    </Badge>
+                  </SelectItem>
+                  <SelectItem value="processing">
+                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-300">
+                      Processing
+                    </Badge>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notes (Optional)</Label>
+              <Input
+                id="notes"
+                placeholder="Add any additional notes or reference numbers..."
+                value={newTransaction.notes}
+                onChange={(e) => setNewTransaction({...newTransaction, notes: e.target.value})}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateTransactionOpen(false);
+                // Reset form
+                setNewTransaction({
+                  product_id: '',
+                  warehouse_id: '',
+                  transaction_type: 'inbound' as TransactionType,
+                  quantity_change: 0,
+                  status: 'pending' as TransactionStatus,
+                  notes: ''
+                });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  // Validate required fields
+                  if (!newTransaction.product_id || !newTransaction.warehouse_id) {
+                    toast({
+                      title: "Validation Error",
+                      description: "Please select both product and warehouse",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
+                  if (newTransaction.quantity_change === 0) {
+                    toast({
+                      title: "Validation Error",
+                      description: "Quantity must be greater than 0",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+
+                  const response = await apiClient.createTransaction({
+                    product_id: parseInt(newTransaction.product_id),
+                    warehouse_id: parseInt(newTransaction.warehouse_id),
+                    transaction_type: newTransaction.transaction_type,
+                    quantity_change: newTransaction.quantity_change,
+                    status: newTransaction.status,
+                    notes: newTransaction.notes || undefined
+                  });
+
+                  toast({
+                    title: "Transaction Created",
+                    description: `Transaction #${response.transaction_number} created successfully`,
+                  });
+
+                  setCreateTransactionOpen(false);
+                  // Reset form
+                  setNewTransaction({
+                    product_id: '',
+                    warehouse_id: '',
+                    transaction_type: 'inbound' as TransactionType,
+                    quantity_change: 0,
+                    status: 'pending' as TransactionStatus,
+                    notes: ''
+                  });
+                  // Reload transactions and dashboard data
+                  loadTransactions(transactionsPagination.offset, transactionsPagination.limit);
+                  loadDashboardData();
+                } catch (error) {
+                  console.error('Error creating transaction:', error);
+                  toast({
+                    title: "Error",
+                    description: error instanceof Error ? error.message : "Failed to create transaction",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              disabled={!newTransaction.product_id || !newTransaction.warehouse_id || newTransaction.quantity_change === 0}
+            >
+              Create Transaction
             </Button>
           </DialogFooter>
         </DialogContent>

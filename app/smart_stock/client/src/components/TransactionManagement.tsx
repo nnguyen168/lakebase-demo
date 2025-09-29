@@ -108,14 +108,22 @@ export function TransactionManagement({ onTransactionAdded }: TransactionManagem
 
   return (
     <div className="flex gap-2">
-      {/* Single Transaction Modal */}
-      <Dialog open={singleModalOpen} onOpenChange={setSingleModalOpen}>
-        <DialogTrigger asChild>
-          <Button size="sm" className="gap-2">
-            <Plus className="h-4 w-4" />
-            Create Transaction
-          </Button>
-        </DialogTrigger>
+      {/* Single Transaction Button - Modal handled by parent */}
+      <Button
+        size="sm"
+        className="gap-2"
+        onClick={() => {
+          // Trigger the parent's enhanced modal
+          const event = new CustomEvent('openCreateTransaction');
+          window.dispatchEvent(event);
+        }}
+      >
+        <Plus className="h-4 w-4" />
+        Create Transaction
+      </Button>
+
+      {/* Original Dialog kept but hidden - will be removed in cleanup */}
+      <Dialog open={false} onOpenChange={setSingleModalOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Create New Transaction</DialogTitle>

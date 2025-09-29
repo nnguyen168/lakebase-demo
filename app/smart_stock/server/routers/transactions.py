@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from ..models import (
     InventoryTransaction, InventoryTransactionCreate, InventoryTransactionUpdate,
     TransactionResponse, TransactionManagementKPI, TransactionStatus, TransactionType,
-    PaginatedResponse, PaginationMeta, BulkStatusUpdateRequest, BulkStatusUpdateResponse
+    PaginatedResponse, PaginationMeta, BulkStatusUpdateRequest, BulkStatusUpdateResponse,
+    BulkDeleteRequest, BulkDeleteResponse
 )
 # Use database selector
 from ..db_selector import db
@@ -204,12 +205,21 @@ async def get_transaction(transaction_id: int):
 async def create_transaction(transaction: InventoryTransactionCreate):
     """Create a new inventory transaction."""
     try:
-        # Generate transaction number
-        transaction_number = f"TXN-{datetime.now().strftime('%Y%m%d')}-{datetime.now().strftime('%H%M%S')}"
+        # Generate transaction number with microseconds for uniqueness
+        import time
+        timestamp = datetime.now()
+        transaction_number = f"TXN-{timestamp.strftime('%Y%m%d')}-{timestamp.strftime('%H%M%S')}-{int(time.time() * 1000) % 1000000}"
 
-        # Insert the transaction
-        query = """
+        # Get the current max transaction_id and add 1 for a safe new ID
+        # This is a workaround for the corrupted sequence
+        max_id_query = "SELECT COALESCE(MAX(transaction_id), 0) + 1 FROM inventory_transactions"
+        result = db.execute_query(max_id_query)
+        new_transaction_id = result[0]['coalesce'] if result else 1
+
+        # Insert with explicit transaction_id to avoid sequence issues
+        insert_query = """
             INSERT INTO inventory_transactions (
+                transaction_id,
                 transaction_number,
                 product_id,
                 warehouse_id,
@@ -217,28 +227,49 @@ async def create_transaction(transaction: InventoryTransactionCreate):
                 transaction_type,
                 status,
                 notes
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-            RETURNING *
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """
 
         params = (
+            new_transaction_id,
             transaction_number,
             transaction.product_id,
             transaction.warehouse_id,
             transaction.quantity_change,
             transaction.transaction_type.value,
-            'pending',
+            transaction.status.value if transaction.status else 'pending',
             transaction.notes
         )
 
-        result = db.execute_query(query, params)
+        # Use execute_update to perform the insert
+        rows_affected = db.execute_update(insert_query, params)
 
-        if result:
-            return result[0]
+        if rows_affected > 0:
+            # Now fetch the created record using the unique transaction_number
+            select_query = """
+                SELECT
+                    t.*,
+                    p.name as product_name,
+                    w.name as warehouse_name
+                FROM inventory_transactions t
+                JOIN products p ON t.product_id = p.product_id
+                JOIN warehouses w ON t.warehouse_id = w.warehouse_id
+                WHERE t.transaction_number = %s
+            """
+
+            result = db.execute_query(select_query, (transaction_number,))
+
+            if result:
+                return result[0]
 
         raise HTTPException(status_code=500, detail="Failed to create transaction")
 
+    except HTTPException:
+        raise
     except Exception as e:
+        import traceback
+        print(f"Error creating transaction: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to create transaction: {str(e)}")
 
 
@@ -303,6 +334,53 @@ async def bulk_update_status(request: BulkStatusUpdateRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update transaction status: {str(e)}")
+
+
+@router.delete("/bulk-delete", response_model=BulkDeleteResponse)
+async def bulk_delete_transactions(request: BulkDeleteRequest):
+    """Delete multiple transactions at once."""
+    try:
+        if not request.transaction_ids:
+            raise HTTPException(status_code=400, detail="No transaction IDs provided")
+
+        # Check which transactions exist
+        placeholders = ', '.join(['%s'] * len(request.transaction_ids))
+        check_query = f"""
+            SELECT transaction_id
+            FROM inventory_transactions
+            WHERE transaction_id IN ({placeholders})
+        """
+
+        existing_transactions = db.execute_query(check_query, tuple(request.transaction_ids))
+
+        if not existing_transactions:
+            raise HTTPException(status_code=404, detail="No valid transactions found to delete")
+
+        found_ids = [t['transaction_id'] for t in existing_transactions]
+        missing_ids = set(request.transaction_ids) - set(found_ids)
+
+        # Delete the transactions
+        delete_query = f"""
+            DELETE FROM inventory_transactions
+            WHERE transaction_id IN ({placeholders})
+        """
+
+        deleted_count = db.execute_update(delete_query, tuple(request.transaction_ids))
+
+        # Prepare response message
+        message = f"Successfully deleted {deleted_count} transaction(s)"
+        if missing_ids:
+            message += f" (IDs not found: {list(missing_ids)})"
+
+        return BulkDeleteResponse(
+            deleted_count=deleted_count,
+            message=message
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete transactions: {str(e)}")
 
 
 @router.put("/{transaction_id}", response_model=InventoryTransaction)

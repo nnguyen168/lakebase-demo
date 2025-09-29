@@ -137,6 +137,7 @@ class InventoryTransactionCreate(BaseModel):
     warehouse_id: int
     quantity_change: int
     transaction_type: TransactionType
+    status: Optional[TransactionStatus] = TransactionStatus.PENDING
     notes: Optional[str] = None
 
 
@@ -331,4 +332,15 @@ class BulkStatusUpdateRequest(BaseModel):
 class BulkStatusUpdateResponse(BaseModel):
     """Response model for bulk status update."""
     updated_count: int
+    message: str
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request model for bulk delete."""
+    transaction_ids: List[int]
+
+
+class BulkDeleteResponse(BaseModel):
+    """Response model for bulk delete."""
+    deleted_count: int
     message: str
