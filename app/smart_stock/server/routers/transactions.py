@@ -2,12 +2,12 @@
 
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..models import (
     InventoryTransaction, InventoryTransactionCreate, InventoryTransactionUpdate,
     TransactionResponse, TransactionManagementKPI, TransactionStatus, TransactionType,
-    PaginatedResponse, PaginationMeta
+    PaginatedResponse, PaginationMeta, BulkStatusUpdateRequest, BulkStatusUpdateResponse
 )
 # Use database selector
 from ..db_selector import db
@@ -17,14 +17,23 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 
 @router.get("/", response_model=PaginatedResponse[TransactionResponse])
 async def get_transactions(
-    status: Optional[TransactionStatus] = Query(None, description="Filter by transaction status"),
-    warehouse_id: Optional[int] = Query(None, description="Filter by warehouse ID"),
-    transaction_type: Optional[TransactionType] = Query(None, description="Filter by transaction type"),
+    status: Optional[List[TransactionStatus]] = Query(None, description="Filter by transaction status (multiple values allowed)"),
+    warehouse_id: Optional[List[int]] = Query(None, description="Filter by warehouse ID (multiple values allowed)"),
+    product_id: Optional[List[int]] = Query(None, description="Filter by product ID (multiple values allowed)"),
+    transaction_type: Optional[List[TransactionType]] = Query(None, description="Filter by transaction type (multiple values allowed)"),
+    date_from: Optional[datetime] = Query(None, description="Filter transactions from this date"),
+    date_to: Optional[datetime] = Query(None, description="Filter transactions until this date"),
+    sort_by: Optional[str] = Query("transaction_timestamp", description="Field to sort by (product, warehouse, transaction_timestamp)"),
+    sort_order: Optional[str] = Query("desc", description="Sort order (asc or desc)"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of transactions to return"),
     offset: int = Query(0, ge=0, description="Number of transactions to skip")
 ):
     """Get list of inventory transactions with optional filters and pagination metadata."""
     try:
+        # Debug: Log the incoming filter parameters
+        print(f"Filter params - status: {status}, warehouse_id: {warehouse_id}, product_id: {product_id}, "
+              f"transaction_type: {transaction_type}, date_from: {date_from}, date_to: {date_to}")
+
         # Build base query for filtering
         base_query = """
             FROM inventory_transactions t
@@ -35,22 +44,54 @@ async def get_transactions(
 
         params = []
 
-        if status:
-            base_query += " AND t.status = %s"
-            params.append(status.value)
+        if status and len(status) > 0:
+            placeholders = ', '.join(['%s'] * len(status))
+            base_query += f" AND t.status IN ({placeholders})"
+            params.extend([s.value for s in status])
 
-        if warehouse_id:
-            base_query += " AND t.warehouse_id = %s"
-            params.append(warehouse_id)
+        if warehouse_id and len(warehouse_id) > 0:
+            placeholders = ', '.join(['%s'] * len(warehouse_id))
+            base_query += f" AND t.warehouse_id IN ({placeholders})"
+            params.extend(warehouse_id)
 
-        if transaction_type:
-            base_query += " AND t.transaction_type = %s"
-            params.append(transaction_type.value)
+        if product_id and len(product_id) > 0:
+            placeholders = ', '.join(['%s'] * len(product_id))
+            base_query += f" AND t.product_id IN ({placeholders})"
+            params.extend(product_id)
+
+        if transaction_type and len(transaction_type) > 0:
+            placeholders = ', '.join(['%s'] * len(transaction_type))
+            base_query += f" AND t.transaction_type IN ({placeholders})"
+            params.extend([t.value for t in transaction_type])
+
+        if date_from:
+            base_query += " AND t.transaction_timestamp >= %s"
+            params.append(date_from)
+
+        if date_to:
+            # Add 23:59:59 to date_to to include the entire day
+            base_query += " AND t.transaction_timestamp < %s"
+            # Add one day to date_to to include all transactions on that day
+            date_to_inclusive = date_to + timedelta(days=1)
+            params.append(date_to_inclusive)
 
         # Get total count
         count_query = "SELECT COUNT(*) as total " + base_query
+        print(f"Count query: {count_query}")
+        print(f"Query params: {params}")
         count_result = db.execute_query(count_query, tuple(params) if params else None)
         total = count_result[0]['total'] if count_result else 0
+
+        # Map sort fields to actual database columns
+        sort_mapping = {
+            "product": "p.name",
+            "warehouse": "w.name",
+            "transaction_timestamp": "t.transaction_timestamp"
+        }
+
+        # Validate and apply sorting
+        sort_column = sort_mapping.get(sort_by, "t.transaction_timestamp")
+        order_direction = "ASC" if sort_order and sort_order.lower() == "asc" else "DESC"
 
         # Get paginated results
         data_query = """
@@ -62,8 +103,9 @@ async def get_transactions(
                 w.name as warehouse,
                 t.transaction_type,
                 t.transaction_timestamp,
-                t.status
-        """ + base_query + " ORDER BY t.transaction_timestamp DESC LIMIT %s OFFSET %s"
+                t.status,
+                t.notes
+        """ + base_query + f" ORDER BY {sort_column} {order_direction} LIMIT %s OFFSET %s"
 
         data_params = params + [limit, offset]
         results = db.execute_query(data_query, tuple(data_params))
@@ -200,6 +242,69 @@ async def create_transaction(transaction: InventoryTransactionCreate):
         raise HTTPException(status_code=500, detail=f"Failed to create transaction: {str(e)}")
 
 
+@router.put("/bulk-status", response_model=BulkStatusUpdateResponse)
+async def bulk_update_status(request: BulkStatusUpdateRequest):
+    """Update status for multiple transactions at once."""
+    try:
+        if not request.transaction_ids:
+            raise HTTPException(status_code=400, detail="No transaction IDs provided")
+
+        # Validate transactions exist and can be updated
+        placeholders = ', '.join(['%s'] * len(request.transaction_ids))
+        check_query = f"""
+            SELECT transaction_id, status
+            FROM inventory_transactions
+            WHERE transaction_id IN ({placeholders})
+        """
+
+        existing_transactions = db.execute_query(check_query, tuple(request.transaction_ids))
+
+        if not existing_transactions:
+            raise HTTPException(status_code=404, detail="No valid transactions found")
+
+        found_ids = {t['transaction_id'] for t in existing_transactions}
+        missing_ids = set(request.transaction_ids) - found_ids
+
+        if missing_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Transactions not found: {list(missing_ids)}"
+            )
+
+        # Check if any transactions are in a final state that can't be changed
+        final_states = ['delivered', 'cancelled']
+        locked_transactions = [
+            t['transaction_id'] for t in existing_transactions
+            if t['status'] in final_states and request.status.value not in final_states
+        ]
+
+        if locked_transactions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot update transactions in final state: {locked_transactions}"
+            )
+
+        # Perform bulk update
+        update_query = f"""
+            UPDATE inventory_transactions
+            SET status = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE transaction_id IN ({placeholders})
+        """
+
+        params = [request.status.value] + request.transaction_ids
+        affected_rows = db.execute_update(update_query, tuple(params))
+
+        return BulkStatusUpdateResponse(
+            updated_count=affected_rows,
+            message=f"Successfully updated {affected_rows} transaction(s) to status '{request.status.value}'"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update transaction status: {str(e)}")
+
+
 @router.put("/{transaction_id}", response_model=InventoryTransaction)
 async def update_transaction(transaction_id: int, transaction_update: InventoryTransactionUpdate):
     """Update an existing transaction."""
@@ -283,3 +388,5 @@ async def delete_transaction(transaction_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to cancel transaction: {str(e)}")
+
+

@@ -2,19 +2,24 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { BulkStatusUpdateRequest } from '../models/BulkStatusUpdateRequest';
+import type { BulkStatusUpdateResponse } from '../models/BulkStatusUpdateResponse';
 import type { ForecastStatus } from '../models/ForecastStatus';
 import type { InventoryForecast } from '../models/InventoryForecast';
 import type { InventoryForecastUpdate } from '../models/InventoryForecastUpdate';
 import type { InventoryTransaction } from '../models/InventoryTransaction';
 import type { InventoryTransactionCreate } from '../models/InventoryTransactionCreate';
 import type { InventoryTransactionUpdate } from '../models/InventoryTransactionUpdate';
+import type { InventoryTurnoverMetrics } from '../models/InventoryTurnoverMetrics';
 import type { Order } from '../models/Order';
 import type { OrderCreate } from '../models/OrderCreate';
 import type { OrderStatus } from '../models/OrderStatus';
 import type { OrderUpdate } from '../models/OrderUpdate';
+import type { OTPRMetrics } from '../models/OTPRMetrics';
 import type { PaginatedResponse_InventoryForecastResponse_ } from '../models/PaginatedResponse_InventoryForecastResponse_';
 import type { PaginatedResponse_Product_ } from '../models/PaginatedResponse_Product_';
 import type { PaginatedResponse_TransactionResponse_ } from '../models/PaginatedResponse_TransactionResponse_';
+import type { PaginatedResponse_Warehouse_ } from '../models/PaginatedResponse_Warehouse_';
 import type { Product } from '../models/Product';
 import type { ProductCreate } from '../models/ProductCreate';
 import type { ProductUpdate } from '../models/ProductUpdate';
@@ -24,6 +29,7 @@ import type { TransactionStatus } from '../models/TransactionStatus';
 import type { TransactionType } from '../models/TransactionType';
 import type { UserInfo } from '../models/UserInfo';
 import type { UserWorkspaceInfo } from '../models/UserWorkspaceInfo';
+import type { Warehouse } from '../models/Warehouse';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
@@ -55,18 +61,28 @@ export class ApiService {
     /**
      * Get Transactions
      * Get list of inventory transactions with optional filters and pagination metadata.
-     * @param status Filter by transaction status
-     * @param warehouseId Filter by warehouse ID
-     * @param transactionType Filter by transaction type
+     * @param status Filter by transaction status (multiple values allowed)
+     * @param warehouseId Filter by warehouse ID (multiple values allowed)
+     * @param productId Filter by product ID (multiple values allowed)
+     * @param transactionType Filter by transaction type (multiple values allowed)
+     * @param dateFrom Filter transactions from this date
+     * @param dateTo Filter transactions until this date
+     * @param sortBy Field to sort by (product, warehouse, transaction_timestamp)
+     * @param sortOrder Sort order (asc or desc)
      * @param limit Maximum number of transactions to return
      * @param offset Number of transactions to skip
      * @returns PaginatedResponse_TransactionResponse_ Successful Response
      * @throws ApiError
      */
     public static getTransactionsApiTransactionsGet(
-        status?: (TransactionStatus | null),
-        warehouseId?: (number | null),
-        transactionType?: (TransactionType | null),
+        status?: (Array<TransactionStatus> | null),
+        warehouseId?: (Array<number> | null),
+        productId?: (Array<number> | null),
+        transactionType?: (Array<TransactionType> | null),
+        dateFrom?: (string | null),
+        dateTo?: (string | null),
+        sortBy?: (string | null),
+        sortOrder?: (string | null),
         limit: number = 100,
         offset?: number,
     ): CancelablePromise<PaginatedResponse_TransactionResponse_> {
@@ -76,7 +92,12 @@ export class ApiService {
             query: {
                 'status': status,
                 'warehouse_id': warehouseId,
+                'product_id': productId,
                 'transaction_type': transactionType,
+                'date_from': dateFrom,
+                'date_to': dateTo,
+                'sort_by': sortBy,
+                'sort_order': sortOrder,
                 'limit': limit,
                 'offset': offset,
             },
@@ -185,6 +206,26 @@ export class ApiService {
         });
     }
     /**
+     * Bulk Update Status
+     * Update status for multiple transactions at once.
+     * @param requestBody
+     * @returns BulkStatusUpdateResponse Successful Response
+     * @throws ApiError
+     */
+    public static bulkUpdateStatusApiTransactionsBulkStatusPut(
+        requestBody: BulkStatusUpdateRequest,
+    ): CancelablePromise<BulkStatusUpdateResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/transactions/bulk-status',
+            body: requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
      * Get Inventory Forecast
      * Get inventory forecast with optional filters and pagination metadata.
      * @param warehouseId Filter by warehouse ID
@@ -214,6 +255,33 @@ export class ApiService {
                 'offset': offset,
                 'sort_by': sortBy,
                 'sort_order': sortOrder,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Inventory History
+     * Get historical inventory levels for a specific product and warehouse.
+     * @param itemId Product SKU to get history for
+     * @param warehouseId Warehouse ID to get history for
+     * @param days Number of days of history to return
+     * @returns any Successful Response
+     * @throws ApiError
+     */
+    public static getInventoryHistoryApiInventoryHistoryGet(
+        itemId: string,
+        warehouseId: number,
+        days: number = 30,
+    ): CancelablePromise<Array<Record<string, any>>> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/inventory/history',
+            query: {
+                'item_id': itemId,
+                'warehouse_id': warehouseId,
+                'days': days,
             },
             errors: {
                 422: `Validation Error`,
@@ -485,6 +553,84 @@ export class ApiService {
             url: '/api/orders/{order_id}',
             path: {
                 'order_id': orderId,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Otpr Metrics
+     * Get On-Time Production Rate metrics from the otpr view.
+     *
+     * Returns the current and previous 30-day OTPR percentages,
+     * the percentage point change, and trend indicator.
+     *
+     * This endpoint reads real-time metrics from the database view,
+     * so it will reflect any updates immediately.
+     * @returns OTPRMetrics Successful Response
+     * @throws ApiError
+     */
+    public static getOtprMetricsApiOtprGet(): CancelablePromise<OTPRMetrics> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/otpr/',
+        });
+    }
+    /**
+     * Get Inventory Turnover Metrics
+     * Get Inventory Turnover metrics from the inventory_turnover view.
+     *
+     * Returns the overall inventory turnover rate and related metrics.
+     * This endpoint reads real-time metrics from the database view.
+     * @returns InventoryTurnoverMetrics Successful Response
+     * @throws ApiError
+     */
+    public static getInventoryTurnoverMetricsApiInventoryTurnoverGet(): CancelablePromise<InventoryTurnoverMetrics> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/inventory-turnover/',
+        });
+    }
+    /**
+     * Get Warehouses
+     * Get all warehouses with pagination metadata.
+     * @param limit Maximum number of warehouses to return
+     * @param offset Number of warehouses to skip
+     * @returns PaginatedResponse_Warehouse_ Successful Response
+     * @throws ApiError
+     */
+    public static getWarehousesApiWarehousesGet(
+        limit: number = 100,
+        offset?: number,
+    ): CancelablePromise<PaginatedResponse_Warehouse_> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/warehouses/',
+            query: {
+                'limit': limit,
+                'offset': offset,
+            },
+            errors: {
+                422: `Validation Error`,
+            },
+        });
+    }
+    /**
+     * Get Warehouse
+     * Get a specific warehouse by ID.
+     * @param warehouseId
+     * @returns Warehouse Successful Response
+     * @throws ApiError
+     */
+    public static getWarehouseApiWarehousesWarehouseIdGet(
+        warehouseId: number,
+    ): CancelablePromise<Warehouse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/warehouses/{warehouse_id}',
+            path: {
+                'warehouse_id': warehouseId,
             },
             errors: {
                 422: `Validation Error`,

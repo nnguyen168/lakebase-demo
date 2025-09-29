@@ -10,22 +10,48 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { DatePicker } from '@/components/ui/date-picker';
+import { Label } from '@/components/ui/label';
 import Pagination, { PaginationMeta } from '@/components/ui/pagination';
 import {
   AlertTriangle, Package, TrendingUp, TrendingDown, Clock, Truck,
   CheckCircle, Factory, ArrowUp, ArrowDown, ArrowRight,
-  Activity, ShoppingCart, Loader2, ArrowUpDown, ChevronUp, ChevronDown, RefreshCw, BarChart3
+  Activity, ShoppingCart, Loader2, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, RefreshCw, BarChart3, Filter, X,
+  Trash2, Edit3
 } from 'lucide-react';
 import { apiClient } from '@/fastapi_client/client';
-import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse } from '@/fastapi_client';
+import { TransactionResponse, TransactionManagementKPI, InventoryForecastResponse, Product, Warehouse, TransactionStatus, TransactionType } from '@/fastapi_client';
 import { TransactionManagement } from '@/components/TransactionManagement';
 import ForecastModal from '@/components/ForecastModal';
 import CreateOrderModal from '@/components/CreateOrderModal';
 import OrderSuccessModal from '@/components/OrderSuccessModal';
 import { useUserInfo } from '@/hooks/useUserInfo';
 import { getTransactionStatusStyle, getInventoryStatusStyle, formatStatusText } from '@/lib/status-utils';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { CalendarIcon } from 'lucide-react';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 
 // Elena's KPIs
 interface ElenaKPIs {
@@ -54,6 +80,7 @@ interface WarehouseData {
 
 const SmartStockDashboard: React.FC = () => {
   const { displayName, role } = useUserInfo();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('transactions');
   const [kpis, setKpis] = useState<ElenaKPIs>({
     onTimeProductionRate: 94.5,
@@ -78,8 +105,35 @@ const SmartStockDashboard: React.FC = () => {
   const [turnoverLoading, setTurnoverLoading] = useState(false);
   const [expeditedLoading, setExpeditedLoading] = useState(false);
   const [daysOfStockLoading, setDaysOfStockLoading] = useState(false);
+
+  // Filter state
+  const [products, setProducts] = useState<Product[]>([]);
+  const [warehousesList, setWarehousesList] = useState<Warehouse[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [selectedWarehouses, setSelectedWarehouses] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedTransactionTypes, setSelectedTransactionTypes] = useState<string[]>([]);
+  const [dateFrom, setDateFrom] = useState<Date | null>(null);
+  const [dateTo, setDateTo] = useState<Date | null>(null);
+
+  // Selection state for Gmail-like checkbox functionality
+  const [selectedTransactions, setSelectedTransactions] = useState<Set<number>>(new Set());
+
+  // Status change modal state
+  const [statusChangeModalOpen, setStatusChangeModalOpen] = useState(false);
+  const [targetStatus, setTargetStatus] = useState<string>('confirmed');
+  const [showFilters, setShowFilters] = useState(false);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [shouldReloadAfterClear, setShouldReloadAfterClear] = useState(false);
   const [transactionKpi, setTransactionKpi] = useState<TransactionManagementKPI | null>(null);
   const [alertCounts, setAlertCounts] = useState({ critical: 0, warning: 0, total: 0 });
+
+  // Transaction sort state
+  type TransactionSortKey = 'product' | 'warehouse' | 'transaction_timestamp';
+  const [transactionSort, setTransactionSort] = useState<{key: TransactionSortKey, order: 'asc' | 'desc'}>({
+    key: 'transaction_timestamp',
+    order: 'desc'
+  });
   type ForecastSortKey = 'severity' | 'stock' | 'forecast' | 'product';
   interface ForecastSortState {
     key: ForecastSortKey;
@@ -111,6 +165,7 @@ const SmartStockDashboard: React.FC = () => {
 
   useEffect(() => {
     loadDashboardData();
+    loadFilterOptions();
   }, []);
 
   useEffect(() => {
@@ -118,6 +173,19 @@ const SmartStockDashboard: React.FC = () => {
     loadForecast(forecastPagination.offset, forecastPagination.limit);
     loadAlertCounts();
   }, [forecastSort.key, forecastSort.direction]);
+
+  useEffect(() => {
+    // Reload transactions when sort changes
+    loadTransactions(transactionsPagination.offset, transactionsPagination.limit);
+  }, [transactionSort.key, transactionSort.order]);
+
+  useEffect(() => {
+    // Reload transactions after clearing filters
+    if (shouldReloadAfterClear) {
+      loadTransactions(0, transactionsPagination.limit);
+      setShouldReloadAfterClear(false);
+    }
+  }, [shouldReloadAfterClear]);
 
   // Removed sortForecastItems since we use server-side sorting
 
@@ -135,15 +203,38 @@ const SmartStockDashboard: React.FC = () => {
     }
   };
 
+  const loadFilterOptions = async () => {
+    try {
+      const [productsResponse, warehousesResponse] = await Promise.all([
+        apiClient.getProducts(),
+        apiClient.getWarehouses({ limit: 100, offset: 0 })
+      ]);
+
+      if (productsResponse) {
+        setProducts(productsResponse.items || []);
+      }
+      if (warehousesResponse) {
+        setWarehousesList(warehousesResponse.items || []);
+      }
+    } catch (error) {
+      console.error('Error loading filter options:', error);
+    }
+  };
+
   const loadTransactions = async (offset: number = 0, limit: number = 20) => {
     try {
       setTransactionsLoading(true);
 
-      // Load transactions with pagination
+      // Load transactions with pagination, filters, and sorting
       const transactionsResponse = await apiClient.getTransactions(
-        undefined, // status
-        undefined, // warehouseId
-        undefined, // transactionType
+        selectedStatuses.length > 0 ? selectedStatuses : undefined,
+        selectedWarehouses.length > 0 ? selectedWarehouses.map(w => parseInt(w)) : undefined,
+        selectedProducts.length > 0 ? selectedProducts.map(p => parseInt(p)) : undefined,
+        selectedTransactionTypes.length > 0 ? selectedTransactionTypes : undefined,
+        dateFrom ? dateFrom.toISOString() : undefined,
+        dateTo ? dateTo.toISOString() : undefined,
+        transactionSort.key,
+        transactionSort.order,
         limit,
         offset
       );
@@ -491,11 +582,74 @@ const SmartStockDashboard: React.FC = () => {
 
   // Pagination handlers
   const handleTransactionsPageChange = (offset: number, limit: number) => {
+    // Clear selection when changing pages
+    setSelectedTransactions(new Set());
     loadTransactions(offset, limit);
+  };
+
+  // Selection handlers
+  const handleSelectTransaction = (transactionId: number) => {
+    const newSelection = new Set(selectedTransactions);
+    if (newSelection.has(transactionId)) {
+      newSelection.delete(transactionId);
+    } else {
+      newSelection.add(transactionId);
+    }
+    setSelectedTransactions(newSelection);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedTransactions.size === transactions.length && transactions.length > 0) {
+      // If all are selected, deselect all
+      setSelectedTransactions(new Set());
+    } else {
+      // Select all transactions on current page
+      const allIds = new Set(transactions.map(t => t.transaction_id));
+      setSelectedTransactions(allIds);
+    }
+  };
+
+  const isAllSelected = () => {
+    if (transactions.length === 0) return false;
+    return transactions.every(t => selectedTransactions.has(t.transaction_id));
+  };
+
+  const isIndeterminate = () => {
+    if (transactions.length === 0) return false;
+    const selectedCount = transactions.filter(t => selectedTransactions.has(t.transaction_id)).length;
+    return selectedCount > 0 && selectedCount < transactions.length;
   };
 
   const handleForecastPageChange = (offset: number, limit: number) => {
     loadForecast(offset, limit);
+  };
+
+  // Filter handlers
+  const handleApplyFilters = () => {
+    loadTransactions(0, transactionsPagination.limit);
+  };
+
+  const handleClearFilters = () => {
+    setSelectedProducts([]);
+    setSelectedWarehouses([]);
+    setSelectedStatuses([]);
+    setSelectedTransactionTypes([]);
+    setDateFrom(null);
+    setDateTo(null);
+    // Trigger reload after state updates
+    setShouldReloadAfterClear(true);
+  };
+
+  const hasActiveFilters = () => {
+    return selectedProducts.length > 0 || selectedWarehouses.length > 0 || selectedStatuses.length > 0 ||
+           selectedTransactionTypes.length > 0 || dateFrom || dateTo;
+  };
+
+  const handleTransactionSort = (key: TransactionSortKey) => {
+    setTransactionSort(prev => ({
+      key,
+      order: prev.key === key && prev.order === 'desc' ? 'asc' : 'desc'
+    }));
   };
 
   const handleForecastSort = (key: ForecastSortKey) => {
@@ -806,10 +960,487 @@ const SmartStockDashboard: React.FC = () => {
                     <CardTitle>Inventory Transactions</CardTitle>
                     <CardDescription className="mt-1">
                       Real-time view of all inventory movements across warehouses
+                      {selectedTransactions.size > 0 && (
+                        <span className="ml-2 text-blue-600 font-medium">
+                          • {selectedTransactions.size} selected
+                        </span>
+                      )}
                     </CardDescription>
                   </div>
-                  <TransactionManagement onTransactionAdded={loadDashboardData} />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowFilters(!showFilters)}
+                      className="flex items-center gap-2"
+                    >
+                      <Filter className="h-4 w-4" />
+                      {showFilters ? 'Hide Filters' : 'Show Filters'}
+                      {hasActiveFilters() && (
+                        <span className="ml-1 px-1.5 py-0.5 text-xs bg-primary text-primary-foreground rounded-full">
+                          {Object.values({
+                            selectedProducts: selectedProducts.length,
+                            selectedWarehouses: selectedWarehouses.length,
+                            selectedStatuses: selectedStatuses.length,
+                            selectedTransactionTypes: selectedTransactionTypes.length,
+                            dateFrom,
+                            dateTo
+                          }).filter(Boolean).length}
+                        </span>
+                      )}
+                    </Button>
+                    <TransactionManagement onTransactionAdded={loadDashboardData} />
+                  </div>
                 </div>
+
+                {/* Selection Toolbar */}
+                {selectedTransactions.size > 0 && (
+                  <div className="mt-4 border rounded-lg p-3 bg-blue-50 border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-blue-900">
+                          {selectedTransactions.size} transaction{selectedTransactions.size !== 1 ? 's' : ''} selected
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-700 hover:bg-blue-100"
+                          onClick={() => {
+                            setStatusChangeModalOpen(true);
+                            setTargetStatus('confirmed');
+                          }}
+                        >
+                          <Edit3 className="h-4 w-4 mr-1" />
+                          Change Status
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() => {
+                            // TODO: Implement delete functionality
+                            toast({
+                              title: "Delete Feature",
+                              description: "Delete functionality is not yet implemented",
+                              variant: "destructive",
+                            });
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Delete
+                        </Button>
+                        <div className="w-px h-6 bg-blue-200" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-blue-700 hover:bg-blue-100"
+                          onClick={() => setSelectedTransactions(new Set())}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Clear selection
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Collapsible Filters Panel */}
+                {showFilters && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                      {/* Product Filter */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Products</label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-between h-9 px-3">
+                              <span className="text-sm">
+                                {selectedProducts.length === 0 ? 'All products' :
+                                 selectedProducts.length === 1 ? products.find(p => p.product_id?.toString() === selectedProducts[0])?.name :
+                                 `${selectedProducts.length} selected`}
+                              </span>
+                              <ChevronDown className="h-4 w-4 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 p-0" align="start">
+                            <div className="max-h-64 overflow-y-auto p-2">
+                              {products.map((product) => (
+                                product.product_id ? (
+                                  <div key={product.product_id} className="flex items-center space-x-2 py-2 px-2 hover:bg-gray-100 rounded">
+                                    <Checkbox
+                                      id={`product-${product.product_id}`}
+                                      checked={selectedProducts.includes(product.product_id.toString())}
+                                      onCheckedChange={(checked) => {
+                                        const productId = product.product_id!.toString();
+                                        if (checked) {
+                                          setSelectedProducts([...selectedProducts, productId]);
+                                        } else {
+                                          setSelectedProducts(selectedProducts.filter(p => p !== productId));
+                                        }
+                                      }}
+                                    />
+                                    <label
+                                      htmlFor={`product-${product.product_id}`}
+                                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                                    >
+                                      {product.name || `Product ${product.product_id}`}
+                                    </label>
+                                  </div>
+                                ) : null
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      {/* Warehouse Filter */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Warehouses</label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-between h-9 px-3">
+                              <span className="text-sm">
+                                {selectedWarehouses.length === 0 ? 'All warehouses' :
+                                 selectedWarehouses.length === 1 ? warehousesList.find(w => w.warehouse_id?.toString() === selectedWarehouses[0])?.name :
+                                 `${selectedWarehouses.length} selected`}
+                              </span>
+                              <ChevronDown className="h-4 w-4 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 p-0" align="start">
+                            <div className="max-h-64 overflow-y-auto p-2">
+                              {warehousesList.map((warehouse) => (
+                                warehouse.warehouse_id ? (
+                                  <div key={warehouse.warehouse_id} className="flex items-center space-x-2 py-2 px-2 hover:bg-gray-100 rounded">
+                                    <Checkbox
+                                      id={`warehouse-${warehouse.warehouse_id}`}
+                                      checked={selectedWarehouses.includes(warehouse.warehouse_id.toString())}
+                                      onCheckedChange={(checked) => {
+                                        const warehouseId = warehouse.warehouse_id!.toString();
+                                        if (checked) {
+                                          setSelectedWarehouses([...selectedWarehouses, warehouseId]);
+                                        } else {
+                                          setSelectedWarehouses(selectedWarehouses.filter(w => w !== warehouseId));
+                                        }
+                                      }}
+                                    />
+                                    <label
+                                      htmlFor={`warehouse-${warehouse.warehouse_id}`}
+                                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                                    >
+                                      {warehouse.name || `Warehouse ${warehouse.warehouse_id}`}
+                                    </label>
+                                  </div>
+                                ) : null
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      {/* Status Filter */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Status</label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-between h-9 px-3">
+                              <span className="text-sm">
+                                {selectedStatuses.length === 0 ? 'All statuses' :
+                                 selectedStatuses.length === 1 ? selectedStatuses[0] :
+                                 `${selectedStatuses.length} selected`}
+                              </span>
+                              <ChevronDown className="h-4 w-4 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 p-0" align="start">
+                            <div className="max-h-64 overflow-y-auto p-2">
+                              {['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'].map((status) => (
+                                <div key={status} className="flex items-center space-x-2 py-2 px-2 hover:bg-gray-100 rounded">
+                                  <Checkbox
+                                    id={`status-${status}`}
+                                    checked={selectedStatuses.includes(status)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedStatuses([...selectedStatuses, status]);
+                                      } else {
+                                        setSelectedStatuses(selectedStatuses.filter(s => s !== status));
+                                      }
+                                    }}
+                                  />
+                                  <label
+                                    htmlFor={`status-${status}`}
+                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1 capitalize"
+                                  >
+                                    {status}
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      {/* Transaction Type Filter */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Transaction Type</label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full justify-between h-9 px-3">
+                              <span className="text-sm">
+                                {selectedTransactionTypes.length === 0 ? 'All types' :
+                                 selectedTransactionTypes.length === 1 ? selectedTransactionTypes[0] :
+                                 `${selectedTransactionTypes.length} selected`}
+                              </span>
+                              <ChevronDown className="h-4 w-4 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 p-0" align="start">
+                            <div className="max-h-64 overflow-y-auto p-2">
+                              {['sale', 'inbound', 'adjustment'].map((type) => (
+                                <div key={type} className="flex items-center space-x-2 py-2 px-2 hover:bg-gray-100 rounded">
+                                  <Checkbox
+                                    id={`type-${type}`}
+                                    checked={selectedTransactionTypes.includes(type)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedTransactionTypes([...selectedTransactionTypes, type]);
+                                      } else {
+                                        setSelectedTransactionTypes(selectedTransactionTypes.filter(t => t !== type));
+                                      }
+                                    }}
+                                  />
+                                  <label
+                                    htmlFor={`type-${type}`}
+                                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1 capitalize"
+                                  >
+                                    {type}
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      {/* Date Range Filter - Using native date inputs */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Date Range</label>
+                        <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                "w-full justify-start text-left font-normal h-9 px-3",
+                                !dateFrom && !dateTo && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {dateFrom && dateTo ? (
+                                <span className="text-sm truncate">
+                                  {format(dateFrom, "MMM d")} - {format(dateTo, "MMM d, yyyy")}
+                                </span>
+                              ) : dateFrom ? (
+                                <span className="text-sm">From {format(dateFrom, "MMM d, yyyy")}</span>
+                              ) : dateTo ? (
+                                <span className="text-sm">Until {format(dateTo, "MMM d, yyyy")}</span>
+                              ) : (
+                                <span className="text-sm">Pick dates</span>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 p-3" align="start">
+                            <div className="space-y-3">
+                              {/* Quick Presets */}
+                              <div className="space-y-2">
+                                <p className="text-xs font-medium text-gray-700">Quick Select</p>
+                                <div className="grid grid-cols-2 gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => {
+                                      const today = new Date();
+                                      setDateFrom(today);
+                                      setDateTo(today);
+                                    }}
+                                  >
+                                    Today
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => {
+                                      const today = new Date();
+                                      const yesterday = new Date(today);
+                                      yesterday.setDate(today.getDate() - 1);
+                                      setDateFrom(yesterday);
+                                      setDateTo(yesterday);
+                                    }}
+                                  >
+                                    Yesterday
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => {
+                                      const today = new Date();
+                                      const lastWeek = new Date(today);
+                                      lastWeek.setDate(today.getDate() - 7);
+                                      setDateFrom(lastWeek);
+                                      setDateTo(today);
+                                    }}
+                                  >
+                                    Last 7 days
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => {
+                                      const today = new Date();
+                                      const last30Days = new Date(today);
+                                      last30Days.setDate(today.getDate() - 30);
+                                      setDateFrom(last30Days);
+                                      setDateTo(today);
+                                    }}
+                                  >
+                                    Last 30 days
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => {
+                                      const today = new Date();
+                                      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+                                      setDateFrom(firstDay);
+                                      setDateTo(today);
+                                    }}
+                                  >
+                                    This Month
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs"
+                                    onClick={() => {
+                                      const today = new Date();
+                                      const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                                      const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+                                      setDateFrom(firstDay);
+                                      setDateTo(lastDay);
+                                    }}
+                                  >
+                                    Last Month
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {/* Native Date Inputs */}
+                              <div className="space-y-3 pt-3 border-t">
+                                <div className="space-y-2">
+                                  <label className="text-xs font-medium text-gray-700">Custom Range</label>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                      <label htmlFor="date-from" className="text-xs text-gray-600">From</label>
+                                      <input
+                                        id="date-from"
+                                        type="date"
+                                        value={dateFrom ? format(dateFrom, 'yyyy-MM-dd') : ''}
+                                        max={dateTo ? format(dateTo, 'yyyy-MM-dd') : undefined}
+                                        onChange={(e) => {
+                                          const date = e.target.value ? new Date(e.target.value + 'T00:00:00') : null;
+                                          setDateFrom(date);
+                                        }}
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label htmlFor="date-to" className="text-xs text-gray-600">To</label>
+                                      <input
+                                        id="date-to"
+                                        type="date"
+                                        value={dateTo ? format(dateTo, 'yyyy-MM-dd') : ''}
+                                        min={dateFrom ? format(dateFrom, 'yyyy-MM-dd') : undefined}
+                                        onChange={(e) => {
+                                          const date = e.target.value ? new Date(e.target.value + 'T00:00:00') : null;
+                                          setDateTo(date);
+                                        }}
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="flex justify-between items-center pt-2 border-t">
+                                <span className="text-xs text-gray-500">
+                                  {dateFrom && dateTo ? (
+                                    <>
+                                      {Math.ceil((dateTo.getTime() - dateFrom.getTime()) / (1000 * 60 * 60 * 24)) + 1} days
+                                    </>
+                                  ) : dateFrom || dateTo ? (
+                                    'Select both dates'
+                                  ) : (
+                                    'No dates selected'
+                                  )}
+                                </span>
+                                <div className="flex gap-2">
+                                  {(dateFrom || dateTo) && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => {
+                                        setDateFrom(null);
+                                        setDateTo(null);
+                                      }}
+                                    >
+                                      Clear
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    className="h-7 px-3 text-xs"
+                                    onClick={() => {
+                                      setDatePickerOpen(false);
+                                    }}
+                                  >
+                                    Done
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+
+                    {/* Filter Action Buttons */}
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleClearFilters}
+                        disabled={!hasActiveFilters()}
+                      >
+                        Clear Filters
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleApplyFilters}
+                      >
+                        Apply Filters
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="space-y-2 mb-4">
@@ -829,22 +1460,70 @@ const SmartStockDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                <Table>
+                <Table className="select-none">
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isAllSelected()}
+                            onCheckedChange={handleSelectAll}
+                            aria-label="Select all"
+                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 data-[state=indeterminate]:bg-blue-600/50 data-[state=indeterminate]:border-blue-600"
+                            data-state={isIndeterminate() ? 'indeterminate' : isAllSelected() ? 'checked' : 'unchecked'}
+                          />
+                        </div>
+                      </TableHead>
                       <TableHead className="w-[50px]">Type</TableHead>
                       <TableHead>Transaction #</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Warehouse</TableHead>
+                      <TableHead>
+                        <button
+                          className="flex items-center gap-1 hover:text-gray-900"
+                          onClick={() => handleTransactionSort('product')}
+                        >
+                          Product
+                          {transactionSort.key === 'product' ? (
+                            transactionSort.order === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+                          )}
+                        </button>
+                      </TableHead>
+                      <TableHead>
+                        <button
+                          className="flex items-center gap-1 hover:text-gray-900"
+                          onClick={() => handleTransactionSort('warehouse')}
+                        >
+                          Warehouse
+                          {transactionSort.key === 'warehouse' ? (
+                            transactionSort.order === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+                          )}
+                        </button>
+                      </TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Date & Time</TableHead>
+                      <TableHead>Notes</TableHead>
+                      <TableHead>
+                        <button
+                          className="flex items-center gap-1 hover:text-gray-900"
+                          onClick={() => handleTransactionSort('transaction_timestamp')}
+                        >
+                          Date & Time
+                          {transactionSort.key === 'transaction_timestamp' ? (
+                            transactionSort.order === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronsUpDown className="h-4 w-4 text-gray-400" />
+                          )}
+                        </button>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {transactionsLoading ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="h-24 text-center">
+                        <TableCell colSpan={9} className="h-24 text-center">
                           <div className="flex items-center justify-center">
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                             Loading transactions...
@@ -853,7 +1532,21 @@ const SmartStockDashboard: React.FC = () => {
                       </TableRow>
                     ) : (
                       transactions.map((transaction) => (
-                        <TableRow key={transaction.transaction_id}>
+                        <TableRow
+                          key={transaction.transaction_id}
+                          className={`hover:bg-gray-50 transition-colors cursor-pointer ${
+                            selectedTransactions.has(transaction.transaction_id) ? 'bg-blue-50 hover:bg-blue-100' : ''
+                          }`}
+                          onClick={() => handleSelectTransaction(transaction.transaction_id)}
+                        >
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedTransactions.has(transaction.transaction_id)}
+                              onCheckedChange={() => handleSelectTransaction(transaction.transaction_id)}
+                              aria-label={`Select transaction ${transaction.transaction_number}`}
+                              className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                            />
+                          </TableCell>
                           <TableCell>{getTransactionIcon(transaction.transaction_type)}</TableCell>
                           <TableCell className="font-mono text-sm">{transaction.transaction_number}</TableCell>
                           <TableCell className="font-medium">{transaction.product}</TableCell>
@@ -866,8 +1559,12 @@ const SmartStockDashboard: React.FC = () => {
                             </span>
                           </TableCell>
                           <TableCell>{getStatusBadge(transaction.status)}</TableCell>
+                          <TableCell className="text-sm text-gray-600 max-w-xs truncate" title={transaction.notes || ''}>
+                            {transaction.notes || '-'}
+                          </TableCell>
                           <TableCell className="text-sm text-gray-600">
                             {new Date(transaction.transaction_timestamp).toLocaleDateString('en-US', {
+                              year: 'numeric',
                               month: 'short',
                               day: 'numeric',
                               hour: '2-digit',
@@ -1157,6 +1854,78 @@ const SmartStockDashboard: React.FC = () => {
           }
         }}
       />
+
+      {/* Status Change Modal */}
+      <Dialog open={statusChangeModalOpen} onOpenChange={setStatusChangeModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Transaction Status</DialogTitle>
+            <DialogDescription>
+              Update the status for {selectedTransactions.size} selected transaction{selectedTransactions.size !== 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="status-select" className="mb-2 block">
+              Select new status:
+            </Label>
+            <Select value={targetStatus} onValueChange={setTargetStatus}>
+              <SelectTrigger id="status-select">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="processing">Processing</SelectItem>
+                <SelectItem value="shipped">Shipped</SelectItem>
+                <SelectItem value="delivered">Delivered</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setStatusChangeModalOpen(false);
+                setTargetStatus('confirmed');
+              }}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  const transactionIds = Array.from(selectedTransactions);
+
+                  const response = await apiClient.transactions.bulkUpdateStatus({
+                    transaction_ids: transactionIds,
+                    status: targetStatus as TransactionStatus
+                  });
+
+                  toast({
+                    title: "Status Updated",
+                    description: response.message,
+                  });
+
+                  setStatusChangeModalOpen(false);
+                  setSelectedTransactions(new Set());
+                  // Reload transactions to show updated status
+                  loadTransactions(transactionsPagination.offset, transactionsPagination.limit);
+                } catch (error) {
+                  console.error('Error updating status:', error);
+                  toast({
+                    title: "Error",
+                    description: error instanceof Error ? error.message : "Failed to update transaction status",
+                    variant: "destructive",
+                  });
+                }
+              }}
+            >
+              Change Status
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
