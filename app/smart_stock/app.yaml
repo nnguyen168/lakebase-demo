@@ -1,7 +1,7 @@
 command: ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
 env:
   - name: DB_HOST
-    value: "instance-9965ce63-150c-4746-93dc-a3dcb78fda3b.database.cloud.databricks.com"
+    value: "instance-72647268-1c88-4fce-909c-661bb1f25976.database.cloud.databricks.com"
   - name: DB_PORT
     value: "5432"
   - name: DB_NAME
