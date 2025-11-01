@@ -20,6 +20,9 @@ DB_CONFIG = {
     "password": os.getenv("DB_PASSWORD", "lakebasedemo2025"),
 }
 
+# Get schema from environment
+DB_SCHEMA = os.getenv("DB_SCHEMA", "public")
+
 def format_value(value):
     """Format values for display."""
     if isinstance(value, datetime):
@@ -36,9 +39,9 @@ def check_views(conn):
         cur.execute("""
             SELECT table_name
             FROM information_schema.views
-            WHERE table_schema = 'public'
+            WHERE table_schema = %s
             ORDER BY table_name
-        """)
+        """, (DB_SCHEMA,))
         views = cur.fetchall()
         return [v[0] for v in views]
 
@@ -46,22 +49,22 @@ def read_view_structure(conn, view_name):
     """Get the structure and definition of a view."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         # Get column information
-        cur.execute(f"""
+        cur.execute("""
             SELECT
                 column_name,
                 data_type,
                 is_nullable
             FROM information_schema.columns
-            WHERE table_name = '{view_name}'
-            AND table_schema = 'public'
+            WHERE table_name = %s
+            AND table_schema = %s
             ORDER BY ordinal_position
-        """)
+        """, (view_name, DB_SCHEMA))
         columns = cur.fetchall()
 
         # Try to get view definition
         try:
             cur.execute(f"""
-                SELECT pg_get_viewdef('{view_name}'::regclass, true) as definition
+                SELECT pg_get_viewdef('{DB_SCHEMA}.{view_name}'::regclass, true) as definition
             """)
             view_def = cur.fetchone()
         except:
@@ -73,11 +76,11 @@ def read_view_data(conn, view_name, limit=20):
     """Read data from a view."""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         # Get count
-        cur.execute(f"SELECT COUNT(*) as count FROM {view_name}")
+        cur.execute(f"SELECT COUNT(*) as count FROM {DB_SCHEMA}.{view_name}")
         count = cur.fetchone()['count']
 
         # Get sample data
-        cur.execute(f"SELECT * FROM {view_name} LIMIT {limit}")
+        cur.execute(f"SELECT * FROM {DB_SCHEMA}.{view_name} LIMIT {limit}")
         rows = cur.fetchall()
 
         return count, rows

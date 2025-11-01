@@ -29,7 +29,7 @@ class LogzWebSocketClient:
       profile = os.getenv('DATABRICKS_CONFIG_PROFILE')
       host = os.getenv('DATABRICKS_HOST')
 
-      cmd = ['uvx', 'databricks', 'auth', 'token']
+      cmd = ['databricks', 'auth', 'token']
 
       if profile:
         cmd.extend(['--profile', profile])

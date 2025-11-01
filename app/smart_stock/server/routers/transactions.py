@@ -1,5 +1,6 @@
 """Inventory transactions API endpoints."""
 
+import os
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from datetime import datetime, timedelta
@@ -36,10 +37,11 @@ async def get_transactions(
               f"transaction_type: {transaction_type}, date_from: {date_from}, date_to: {date_to}")
 
         # Build base query for filtering
-        base_query = """
-            FROM inventory_transactions t
-            JOIN products p ON t.product_id = p.product_id
-            JOIN warehouses w ON t.warehouse_id = w.warehouse_id
+        schema = os.getenv("DB_SCHEMA", "public")
+        base_query = f"""
+            FROM {schema}.inventory_transactions t
+            JOIN {schema}.products p ON t.product_id = p.product_id
+            JOIN {schema}.warehouses w ON t.warehouse_id = w.warehouse_id
             WHERE 1=1
         """
 
@@ -134,7 +136,8 @@ async def get_transaction_kpi():
     """Get KPI metrics for transaction management."""
     try:
         # Get transaction counts by status
-        status_query = """
+        schema = os.getenv('DB_SCHEMA', 'public')
+        status_query = f"""
             SELECT
                 COUNT(*) as total_transactions,
                 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_transactions,
@@ -143,7 +146,7 @@ async def get_transaction_kpi():
                 SUM(CASE WHEN status = 'shipped' THEN 1 ELSE 0 END) as shipped_transactions,
                 SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered_transactions,
                 SUM(ABS(quantity_change)) as total_quantity_change
-            FROM inventory_transactions
+            FROM {schema}.inventory_transactions
         """
 
         result = db.execute_query(status_query)
@@ -177,14 +180,15 @@ async def get_transaction_kpi():
 async def get_transaction(transaction_id: int):
     """Get a specific transaction by ID."""
     try:
-        query = """
+        schema = os.getenv('DB_SCHEMA', 'public')
+        query = f"""
             SELECT
                 t.*,
                 p.name as product_name,
                 w.name as warehouse_name
-            FROM inventory_transactions t
-            JOIN products p ON t.product_id = p.product_id
-            JOIN warehouses w ON t.warehouse_id = w.warehouse_id
+            FROM {schema}.inventory_transactions t
+            JOIN {schema}.products p ON t.product_id = p.product_id
+            JOIN {schema}.warehouses w ON t.warehouse_id = w.warehouse_id
             WHERE t.transaction_id = %s
         """
 
@@ -212,13 +216,14 @@ async def create_transaction(transaction: InventoryTransactionCreate):
 
         # Get the current max transaction_id and add 1 for a safe new ID
         # This is a workaround for the corrupted sequence
-        max_id_query = "SELECT COALESCE(MAX(transaction_id), 0) + 1 FROM inventory_transactions"
+        schema = os.getenv('DB_SCHEMA', 'public')
+        max_id_query = f"SELECT COALESCE(MAX(transaction_id), 0) + 1 FROM {schema}.inventory_transactions"
         result = db.execute_query(max_id_query)
         new_transaction_id = result[0]['coalesce'] if result else 1
 
         # Insert with explicit transaction_id to avoid sequence issues
-        insert_query = """
-            INSERT INTO inventory_transactions (
+        insert_query = f"""
+            INSERT INTO {schema}.inventory_transactions (
                 transaction_id,
                 transaction_number,
                 product_id,
@@ -246,12 +251,12 @@ async def create_transaction(transaction: InventoryTransactionCreate):
 
         if rows_affected > 0:
             # Now fetch the created record using the unique transaction_number
-            select_query = """
+            select_query = f"""
                 SELECT
                     t.*,
                     p.name as product_name,
                     w.name as warehouse_name
-                FROM inventory_transactions t
+                FROM {schema}.inventory_transactions t
                 JOIN products p ON t.product_id = p.product_id
                 JOIN warehouses w ON t.warehouse_id = w.warehouse_id
                 WHERE t.transaction_number = %s
@@ -281,10 +286,11 @@ async def bulk_update_status(request: BulkStatusUpdateRequest):
             raise HTTPException(status_code=400, detail="No transaction IDs provided")
 
         # Validate transactions exist and can be updated
+        schema = os.getenv('DB_SCHEMA', 'public')
         placeholders = ', '.join(['%s'] * len(request.transaction_ids))
         check_query = f"""
             SELECT transaction_id, status
-            FROM inventory_transactions
+            FROM {schema}.inventory_transactions
             WHERE transaction_id IN ({placeholders})
         """
 
@@ -317,7 +323,7 @@ async def bulk_update_status(request: BulkStatusUpdateRequest):
 
         # Perform bulk update
         update_query = f"""
-            UPDATE inventory_transactions
+            UPDATE {schema}.inventory_transactions
             SET status = %s, updated_at = CURRENT_TIMESTAMP
             WHERE transaction_id IN ({placeholders})
         """
@@ -344,10 +350,11 @@ async def bulk_delete_transactions(request: BulkDeleteRequest):
             raise HTTPException(status_code=400, detail="No transaction IDs provided")
 
         # Check which transactions exist
+        schema = os.getenv('DB_SCHEMA', 'public')
         placeholders = ', '.join(['%s'] * len(request.transaction_ids))
         check_query = f"""
             SELECT transaction_id
-            FROM inventory_transactions
+            FROM {schema}.inventory_transactions
             WHERE transaction_id IN ({placeholders})
         """
 
@@ -361,7 +368,7 @@ async def bulk_delete_transactions(request: BulkDeleteRequest):
 
         # Delete the transactions
         delete_query = f"""
-            DELETE FROM inventory_transactions
+            DELETE FROM {schema}.inventory_transactions
             WHERE transaction_id IN ({placeholders})
         """
 
@@ -387,6 +394,7 @@ async def bulk_delete_transactions(request: BulkDeleteRequest):
 async def update_transaction(transaction_id: int, transaction_update: InventoryTransactionUpdate):
     """Update an existing transaction."""
     try:
+        schema = os.getenv('DB_SCHEMA', 'public')
         # Build update query dynamically
         update_fields = []
         params = []
@@ -410,7 +418,7 @@ async def update_transaction(transaction_id: int, transaction_update: InventoryT
         params.append(transaction_id)
 
         query = f"""
-            UPDATE inventory_transactions
+            UPDATE {schema}.inventory_transactions
             SET {', '.join(update_fields)}
             WHERE transaction_id = %s
             RETURNING *
@@ -434,9 +442,10 @@ async def delete_transaction(transaction_id: int):
     """Cancel a transaction."""
     try:
         # Check if transaction exists and can be cancelled
-        check_query = """
+        schema = os.getenv('DB_SCHEMA', 'public')
+        check_query = f"""
             SELECT status
-            FROM inventory_transactions
+            FROM {schema}.inventory_transactions
             WHERE transaction_id = %s
         """
 
@@ -452,8 +461,8 @@ async def delete_transaction(transaction_id: int):
             )
 
         # Update status to cancelled
-        update_query = """
-            UPDATE inventory_transactions
+        update_query = f"""
+            UPDATE {schema}.inventory_transactions
             SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
             WHERE transaction_id = %s
         """

@@ -84,16 +84,16 @@ const SmartStockDashboard: React.FC = () => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('transactions');
   const [kpis, setKpis] = useState<ElenaKPIs>({
-    onTimeProductionRate: 94.5,
-    onTimeProductionRatePrev: 92.3,
-    onTimeProductionChange: 2.2,
-    onTimeProductionTrend: '↑',
-    inventoryTurnoverRatio: 8.2,
-    inventoryTurnoverPrev: 7.8,
-    inventoryTurnoverChange: 0.4,
-    inventoryTurnoverTrend: '↑',
+    onTimeProductionRate: 0,
+    onTimeProductionRatePrev: 0,
+    onTimeProductionChange: 0,
+    onTimeProductionTrend: '→',
+    inventoryTurnoverRatio: 0,
+    inventoryTurnoverPrev: 0,
+    inventoryTurnoverChange: 0,
+    inventoryTurnoverTrend: '→',
     expeditedShipmentsCost: 12500,
-    daysOfStockOnHand: 18
+    daysOfStockOnHand: 0
   });
   const [transactions, setTransactions] = useState<TransactionResponse[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseData[]>([]);
@@ -380,10 +380,10 @@ const SmartStockDashboard: React.FC = () => {
           setKpis(prev => {
             const newKpis = {
               ...prev,
-              onTimeProductionRate: otprData.otpr_last_30d ?? 94.5,
-              onTimeProductionRatePrev: otprData.otpr_prev_30d ?? 92.3,
-              onTimeProductionChange: otprData.change_ppt ?? 2.2,
-              onTimeProductionTrend: otprData.trend ?? '↑'
+              onTimeProductionRate: otprData.otpr_last_30d ?? 0,
+              onTimeProductionRatePrev: otprData.otpr_prev_30d ?? 0,
+              onTimeProductionChange: otprData.change_ppt ?? 0,
+              onTimeProductionTrend: otprData.trend ?? '→'
             };
             console.log('Updated KPIs after OTPR:', newKpis);
             return newKpis;
@@ -401,7 +401,7 @@ const SmartStockDashboard: React.FC = () => {
         if (response.ok) {
           const turnoverData = await response.json();
           console.log('Inventory Turnover Data from API:', turnoverData);
-          const currentTurnover = turnoverData.overall_inventory_turnover ?? 8.2;
+          const currentTurnover = turnoverData.overall_inventory_turnover ?? 0;
 
           setKpis(prev => {
             const newKpis = {
@@ -410,7 +410,7 @@ const SmartStockDashboard: React.FC = () => {
               inventoryTurnoverPrev: 0,
               inventoryTurnoverChange: 0,
               inventoryTurnoverTrend: '→',
-              daysOfStockOnHand: turnoverData.overall_days_on_hand ?? 18
+              daysOfStockOnHand: turnoverData.overall_days_on_hand ?? 0
             };
             console.log('Updated KPIs after Inventory Turnover:', newKpis);
             return newKpis;
@@ -436,10 +436,10 @@ const SmartStockDashboard: React.FC = () => {
         const otprData = await response.json();
         setKpis(prev => ({
           ...prev,
-          onTimeProductionRate: otprData.otpr_last_30d ?? 94.5,
-          onTimeProductionRatePrev: otprData.otpr_prev_30d ?? 92.3,
-          onTimeProductionChange: otprData.change_ppt ?? 2.2,
-          onTimeProductionTrend: otprData.trend ?? '↑'
+          onTimeProductionRate: otprData.otpr_last_30d ?? 0,
+          onTimeProductionRatePrev: otprData.otpr_prev_30d ?? 0,
+          onTimeProductionChange: otprData.change_ppt ?? 0,
+          onTimeProductionTrend: otprData.trend ?? '→'
         }));
       }
     } catch (error) {
@@ -720,6 +720,32 @@ const SmartStockDashboard: React.FC = () => {
     setSuccessOrderData(null);
   };
 
+  // Load data on component mount
+  useEffect(() => {
+    // Load KPIs on mount
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        // Load all KPIs in parallel
+        await Promise.all([
+          refreshOTPR(),
+          refreshInventoryTurnover(),
+          loadKpis(),
+          loadFilterOptions(),
+          loadTransactions(),
+          loadForecast(),
+          loadAlertCounts()
+        ]);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, []); // Empty dependency array means this runs once on mount
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -900,7 +926,7 @@ const SmartStockDashboard: React.FC = () => {
                 </span>
                 <TrendingUp className="w-5 h-5 text-blue-600" />
               </div>
-              <p className="text-xs text-blue-600 mt-1">Days on hand: {kpis.daysOfStockOnHand}</p>
+              <p className="text-xs text-blue-600 mt-1">Target: 32x to 40x</p>
             </CardContent>
           </Card>
 
@@ -1651,7 +1677,7 @@ const SmartStockDashboard: React.FC = () => {
                 */}
                 <div className="relative w-full" style={{ height: '600px' }}>
                   <iframe
-                    src="https://dbc-ea2c343f-6f56.cloud.databricks.com/embed/dashboardsv3/01f09d04e6c51b14b22b8bcafd1534f5?o=3813697403783275"
+                    src="https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/embed/dashboardsv3/01f0b5a263581d55a2343f75a6b7b5c5?o=813231423035746"
                     title="Databricks Analytics Dashboard"
                     className="absolute top-0 left-0 w-full h-full border-0"
                     allowFullScreen

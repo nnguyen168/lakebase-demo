@@ -1,5 +1,6 @@
 """Warehouses management API endpoints."""
 
+import os
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 
@@ -17,19 +18,20 @@ async def get_warehouses(
     """Get all warehouses with pagination metadata."""
     try:
         # Get total count
-        count_query = "SELECT COUNT(*) as total FROM warehouses"
+        schema = os.getenv("DB_SCHEMA", "public")
+        count_query = f"SELECT COUNT(*) as total FROM {schema}.warehouses"
         count_result = db.execute_query(count_query)
         total = count_result[0]['total'] if count_result else 0
 
         # Get paginated results
-        query = """
+        query = f"""
             SELECT
                 warehouse_id,
                 name,
                 location,
                 created_at,
                 updated_at
-            FROM warehouses
+            FROM {schema}.warehouses
             ORDER BY name
             LIMIT %s OFFSET %s
         """
@@ -58,14 +60,15 @@ async def get_warehouses(
 async def get_warehouse(warehouse_id: int):
     """Get a specific warehouse by ID."""
     try:
-        query = """
+        schema = os.getenv('DB_SCHEMA', 'public')
+        query = f"""
             SELECT
                 warehouse_id,
                 name,
                 location,
                 created_at,
                 updated_at
-            FROM warehouses
+            FROM {schema}.warehouses
             WHERE warehouse_id = %s
         """
 

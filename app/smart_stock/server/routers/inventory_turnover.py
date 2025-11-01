@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+import os
 from ..db_selector import db
 
 router = APIRouter(prefix="/inventory-turnover", tags=["inventory"])
@@ -29,7 +30,8 @@ async def get_inventory_turnover_metrics():
     """
     try:
         # Query the inventory_turnover view directly
-        query = "SELECT * FROM public.inventory_turnover"
+        schema = os.getenv("DB_SCHEMA", "public")
+        query = f"SELECT * FROM {schema}.inventory_turnover"
         result = db.execute_query(query)
 
         if result and len(result) > 0:

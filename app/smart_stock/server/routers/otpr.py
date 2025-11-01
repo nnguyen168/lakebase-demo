@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+import os
 from ..db_selector import db
 
 router = APIRouter(prefix="/otpr", tags=["otpr"])
@@ -30,7 +31,8 @@ async def get_otpr_metrics():
     """
     try:
         # Query the OTPR view directly
-        query = "SELECT * FROM public.otpr"
+        schema = os.getenv("DB_SCHEMA", "public")
+        query = f"SELECT * FROM {schema}.otpr"
         result = db.execute_query(query)
 
         if result and len(result) > 0:

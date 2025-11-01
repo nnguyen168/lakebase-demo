@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
 """Check current OTPR values in the database."""
 
+import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
+from pathlib import Path
+from dotenv import load_dotenv
 
-# Database configuration
+# Load environment variables
+env_path = Path(__file__).parent / '.env.local'
+if env_path.exists():
+    load_dotenv(env_path)
+
+# Database configuration from environment
 DB_CONFIG = {
-    "host": "instance-9965ce63-150c-4746-93dc-a3dcb78fda3b.database.cloud.databricks.com",
-    "port": "5432",
-    "database": "databricks_postgres",
-    "user": "lakebase_demo_app",
-    "password": "lakebasedemo2025",
+    "host": os.getenv("DB_HOST", "instance-9965ce63-150c-4746-93dc-a3dcb78fda3b.database.cloud.databricks.com"),
+    "port": os.getenv("DB_PORT", "5432"),
+    "database": os.getenv("DB_NAME", "databricks_postgres"),
+    "user": os.getenv("DB_USER", "lakebase_demo_app"),
+    "password": os.getenv("DB_PASSWORD", "lakebasedemo2025"),
 }
+
+# Get schema from environment
+DB_SCHEMA = os.getenv("DB_SCHEMA", "public")
 
 def check_otpr():
     """Check OTPR values from different sources."""
@@ -26,7 +37,7 @@ def check_otpr():
         # Try to read from OTPR view
         print("\n1️⃣ Attempting to read from OTPR view:")
         try:
-            cur.execute("SELECT * FROM public.otpr")
+            cur.execute(f"SELECT * FROM {DB_SCHEMA}.otpr")
             result = cur.fetchone()
             if result:
                 print("✅ OTPR View Data:")

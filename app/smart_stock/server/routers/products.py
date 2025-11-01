@@ -1,5 +1,6 @@
 """Products management API endpoints."""
 
+import os
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from decimal import Decimal
@@ -24,7 +25,8 @@ async def get_products(
     """Get all products with optional filters and pagination metadata."""
     try:
         # Build base query for filtering
-        base_query = "FROM products WHERE 1=1"
+        schema = os.getenv("DB_SCHEMA", "public")
+        base_query = f"FROM {schema}.products WHERE 1=1"
         params = []
 
         if category:
@@ -86,7 +88,8 @@ async def get_products(
 async def get_product(product_id: int):
     """Get a specific product by ID."""
     try:
-        query = """
+        schema = os.getenv('DB_SCHEMA', 'public')
+        query = f"""
             SELECT
                 product_id,
                 name,
@@ -98,7 +101,7 @@ async def get_product(product_id: int):
                 reorder_level,
                 created_at,
                 updated_at
-            FROM products
+            FROM {schema}.products
             WHERE product_id = %s
         """
 
@@ -123,8 +126,9 @@ async def get_product(product_id: int):
 async def create_product(product: ProductCreate):
     """Create a new product."""
     try:
-        query = """
-            INSERT INTO products (name, description, sku, price, unit, category, reorder_level)
+        schema = os.getenv('DB_SCHEMA', 'public')
+        query = f"""
+            INSERT INTO {schema}.products (name, description, sku, price, unit, category, reorder_level)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING product_id, name, description, sku, price, unit, category, reorder_level, created_at, updated_at
         """
@@ -159,7 +163,8 @@ async def update_product(product_id: int, product: ProductUpdate):
     """Update a product."""
     try:
         # First check if product exists
-        existing = db.execute_query("SELECT product_id FROM products WHERE product_id = %s", (product_id,))
+        schema = os.getenv('DB_SCHEMA', 'public')
+        existing = db.execute_query(f"SELECT product_id FROM {schema}.products WHERE product_id = %s", (product_id,))
         if not existing:
             raise HTTPException(status_code=404, detail=f"Product with ID {product_id} not found")
 
@@ -187,8 +192,9 @@ async def update_product(product_id: int, product: ProductUpdate):
             # No fields to update, return current product
             return await get_product(product_id)
 
+        schema = os.getenv('DB_SCHEMA', 'public')
         query = f"""
-            UPDATE products
+            UPDATE {schema}.products
             SET {', '.join(update_fields)}, updated_at = NOW()
             WHERE product_id = %s
             RETURNING product_id, name, description, sku, price, unit, category, reorder_level, created_at, updated_at
@@ -217,12 +223,14 @@ async def delete_product(product_id: int):
     """Delete a product."""
     try:
         # Check if product exists
-        existing = db.execute_query("SELECT product_id FROM products WHERE product_id = %s", (product_id,))
+        schema = os.getenv('DB_SCHEMA', 'public')
+        existing = db.execute_query(f"SELECT product_id FROM {schema}.products WHERE product_id = %s", (product_id,))
         if not existing:
             raise HTTPException(status_code=404, detail=f"Product with ID {product_id} not found")
 
         # Delete the product
-        affected_rows = db.execute_update("DELETE FROM products WHERE product_id = %s", (product_id,))
+        schema = os.getenv('DB_SCHEMA', 'public')
+        affected_rows = db.execute_update(f"DELETE FROM {schema}.products WHERE product_id = %s", (product_id,))
 
         if affected_rows == 0:
             raise HTTPException(status_code=500, detail="Failed to delete product")

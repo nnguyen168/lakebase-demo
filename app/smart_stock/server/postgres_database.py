@@ -36,6 +36,9 @@ class LakebasePostgresConnection:
             "sslmode": "require",  # SSL is required for Lakebase
         }
 
+        # Get schema from environment
+        self.schema = os.getenv("DB_SCHEMA", "public")
+
         # Validate configuration
         if not all([self.db_config["host"], self.db_config["user"], self.db_config["password"]]):
             raise ValueError("DB_HOST, DB_USER, and DB_PASSWORD must be set in environment variables")

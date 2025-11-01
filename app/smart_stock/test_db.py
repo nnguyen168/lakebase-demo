@@ -22,6 +22,9 @@ db_config = {
     "sslmode": "require",
 }
 
+# Get schema from environment
+DB_SCHEMA = os.getenv("DB_SCHEMA", "public")
+
 print("Connecting to database...")
 print(f"Host: {db_config['host']}")
 print(f"Database: {db_config['database']}")
@@ -35,36 +38,36 @@ try:
     cursor.execute("""
         SELECT table_name
         FROM information_schema.tables
-        WHERE table_schema = 'public'
+        WHERE table_schema = %s
         ORDER BY table_name
-    """)
+    """, (DB_SCHEMA,))
     tables = cursor.fetchall()
     print("Available tables:")
     for table in tables:
         print(f"  - {table['table_name']}")
 
     print("\n=== PRODUCTS TABLE ===")
-    cursor.execute("SELECT COUNT(*) as count FROM products")
+    cursor.execute(f"SELECT COUNT(*) as count FROM {DB_SCHEMA}.products")
     count = cursor.fetchone()
     print(f"Total products: {count['count']}")
 
-    cursor.execute("SELECT * FROM products LIMIT 5")
+    cursor.execute(f"SELECT * FROM {DB_SCHEMA}.products LIMIT 5")
     products = cursor.fetchall()
     for p in products:
         print(f"  - {p['name']} (SKU: {p['sku']}, Price: {p['price']})")
 
     print("\n=== WAREHOUSES TABLE ===")
-    cursor.execute("SELECT COUNT(*) as count FROM warehouses")
+    cursor.execute(f"SELECT COUNT(*) as count FROM {DB_SCHEMA}.warehouses")
     count = cursor.fetchone()
     print(f"Total warehouses: {count['count']}")
 
-    cursor.execute("SELECT * FROM warehouses")
+    cursor.execute(f"SELECT * FROM {DB_SCHEMA}.warehouses")
     warehouses = cursor.fetchall()
     for w in warehouses:
         print(f"  - {w['name']} (Location: {w['location']}, ID: {w['warehouse_id']})")
 
     print("\n=== INVENTORY_TRANSACTIONS TABLE ===")
-    cursor.execute("SELECT COUNT(*) as count FROM inventory_transactions")
+    cursor.execute(f"SELECT COUNT(*) as count FROM {DB_SCHEMA}.inventory_transactions")
     count = cursor.fetchone()
     print(f"Total transactions: {count['count']}")
 

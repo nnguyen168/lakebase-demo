@@ -20,7 +20,7 @@ class LakebaseConnection:
         self.token = os.getenv("DATABRICKS_TOKEN", "")
         self.http_path = os.getenv("DATABRICKS_HTTP_PATH", "")
         self.catalog = os.getenv("DATABRICKS_CATALOG", "main")
-        self.schema = os.getenv("DATABRICKS_SCHEMA", "inventory_demo")
+        self.schema = os.getenv("DB_SCHEMA", os.getenv("DATABRICKS_SCHEMA", "inventory_demo"))
         
         if not all([self.host, self.token]):
             raise ValueError("DATABRICKS_HOST and DATABRICKS_TOKEN must be set")
