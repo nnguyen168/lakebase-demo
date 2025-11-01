@@ -121,15 +121,16 @@ async def debug_db_test():
     cursor = conn.cursor()
 
     # Count transactions
-    cursor.execute("SELECT COUNT(*) as count FROM inventory_transactions")
+    schema = os.getenv('DB_SCHEMA', 'public')
+    cursor.execute(f"SELECT COUNT(*) as count FROM {schema}.inventory_transactions")
     transaction_count = cursor.fetchone()['count']
 
     # Count products
-    cursor.execute("SELECT COUNT(*) as count FROM products")
+    cursor.execute(f"SELECT COUNT(*) as count FROM {schema}.products")
     product_count = cursor.fetchone()['count']
 
     # Count warehouses
-    cursor.execute("SELECT COUNT(*) as count FROM warehouses")
+    cursor.execute(f"SELECT COUNT(*) as count FROM {schema}.warehouses")
     warehouse_count = cursor.fetchone()['count']
 
     cursor.close()

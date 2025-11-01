@@ -720,6 +720,32 @@ const SmartStockDashboard: React.FC = () => {
     setSuccessOrderData(null);
   };
 
+  // Load data on component mount
+  useEffect(() => {
+    // Load KPIs on mount
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        // Load all KPIs in parallel
+        await Promise.all([
+          refreshOTPR(),
+          refreshInventoryTurnover(),
+          loadKpis(),
+          loadFilterOptions(),
+          loadTransactions(),
+          loadForecast(),
+          loadAlertCounts()
+        ]);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInitialData();
+  }, []); // Empty dependency array means this runs once on mount
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -900,7 +926,7 @@ const SmartStockDashboard: React.FC = () => {
                 </span>
                 <TrendingUp className="w-5 h-5 text-blue-600" />
               </div>
-              <p className="text-xs text-blue-600 mt-1">Days on hand: {kpis.daysOfStockOnHand}</p>
+              <p className="text-xs text-blue-600 mt-1">Target: 32x to 40x</p>
             </CardContent>
           </Card>
 
@@ -1651,7 +1677,7 @@ const SmartStockDashboard: React.FC = () => {
                 */}
                 <div className="relative w-full" style={{ height: '600px' }}>
                   <iframe
-                    src="https://one-env-nam-nguyen-workspace-classic.cloud.databricks.com/embed/dashboardsv3/01f0a383221019e3ac659eca069eea86?o=3500980823973775"
+                    src="https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/embed/dashboardsv3/01f0b5a263581d55a2343f75a6b7b5c5?o=813231423035746"
                     title="Databricks Analytics Dashboard"
                     className="absolute top-0 left-0 w-full h-full border-0"
                     allowFullScreen

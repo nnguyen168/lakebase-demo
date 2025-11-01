@@ -1,5 +1,6 @@
 """Orders management API endpoints."""
 
+import os
 import random
 import string
 from datetime import datetime, timedelta
@@ -76,8 +77,9 @@ async def create_order(order: OrderCreate):
         if order.forecast_id:
             try:
                 # Update the forecast status to resolved
-                update_query = """
-                    UPDATE inventory_forecast
+                schema = os.getenv('DB_SCHEMA', 'public')
+                update_query = f"""
+                    UPDATE {schema}.inventory_forecast
                     SET status = %s, last_updated = CURRENT_TIMESTAMP
                     WHERE forecast_id = %s
                 """
@@ -113,9 +115,10 @@ async def create_order(order: OrderCreate):
             unique_transaction_number = f"INB-{date_str}-{suffix}"
 
             # Find the next available transaction_id manually
+            schema = os.getenv('DB_SCHEMA', 'public')
             max_id_query = (
-                "SELECT COALESCE(MAX(transaction_id), 0) + 1 as next_id "
-                "FROM inventory_transactions"
+                f"SELECT COALESCE(MAX(transaction_id), 0) + 1 as next_id "
+                f"FROM {schema}.inventory_transactions"
             )
             id_result = db.execute_query(max_id_query)
             next_transaction_id = (
@@ -125,8 +128,8 @@ async def create_order(order: OrderCreate):
             )
 
             # Insert with explicit transaction_id to avoid sequence issues
-            insert_transaction_query = """
-                INSERT INTO inventory_transactions
+            insert_transaction_query = f"""
+                INSERT INTO {schema}.inventory_transactions
                 (transaction_id, transaction_number, product_id, warehouse_id,
                  quantity_change, transaction_type, status, notes,
                  transaction_timestamp, updated_at)

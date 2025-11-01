@@ -23,7 +23,7 @@ targets:
     variables:
       catalog_name: smart_stock
     workspace:
-      host: https://one-env-nam-nguyen-workspace-classic.cloud.databricks.com/
+      host: https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/
     permissions:
       - user_name: lars.liahagen@databricks.com
         level: CAN_MANAGE
@@ -37,7 +37,7 @@ targets:
     variables:
       catalog_name: smart_stock
     workspace:
-      host: https://one-env-nam-nguyen-workspace-classic.cloud.databricks.com/
+      host: https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/
       root_path: /Shared/smart_stock
     permissions:
       - user_name: lars.liahagen@databricks.com

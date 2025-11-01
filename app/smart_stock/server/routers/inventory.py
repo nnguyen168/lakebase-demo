@@ -1,5 +1,6 @@
 """Inventory management API endpoints."""
 
+import os
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 
@@ -38,10 +39,11 @@ async def get_inventory_forecast(
         sort_order = 'desc' if sort_order.lower() == 'desc' else 'asc'
 
         # Build base query for filtering
-        base_query = """
-            FROM inventory_forecast f
-            JOIN products p ON f.product_id = p.product_id
-            JOIN warehouses w ON f.warehouse_id = w.warehouse_id
+        schema = os.getenv("DB_SCHEMA", "public")
+        base_query = f"""
+            FROM {schema}.inventory_forecast f
+            JOIN {schema}.products p ON f.product_id = p.product_id
+            JOIN {schema}.warehouses w ON f.warehouse_id = w.warehouse_id
             WHERE 1=1
         """
 
@@ -67,7 +69,7 @@ async def get_inventory_forecast(
                 p.sku as item_id,
                 p.name as item_name,
                 f.current_stock as stock,
-                f.forecast_30_days,
+                CAST(f.forecast_30_days AS INTEGER) as forecast_30_days,
                 f.warehouse_id,
                 w.name as warehouse_name,
                 w.location as warehouse_location,
@@ -136,32 +138,33 @@ async def get_inventory_history(
     try:
         # Query to get historical inventory levels from the inventory_historical table
         # If that doesn't have data, we can fall back to reconstructing from transactions
-        query = """
-            SELECT 
-                ih.date as history_date,
+        schema = os.getenv('DB_SCHEMA', 'public')
+        query = f"""
+            SELECT
+                ih.snapshot_date as history_date,
                 ih.inventory_level as stock_level
-            FROM inventory_historical ih
-            JOIN products p ON ih.product_id = p.product_id
-            WHERE p.sku = %s 
-            AND ih.warehouse_id = %s 
-            AND ih.date >= CURRENT_DATE - INTERVAL '%s days'
-            ORDER BY ih.date ASC
+            FROM {schema}.inventory_historical ih
+            JOIN {schema}.products p ON ih.product_id = p.product_id
+            WHERE p.sku = %s
+            AND ih.warehouse_id = %s
+            AND ih.snapshot_date >= CURRENT_DATE - INTERVAL '%s days'
+            ORDER BY ih.snapshot_date ASC
         """
         
         results = db.execute_query(query, (item_id, warehouse_id, days))
-        
+
         # If no historical data found, try to reconstruct from transactions
         if not results:
             # Fallback query using inventory_transactions to reconstruct daily levels
-            fallback_query = """
+            fallback_query = f"""
                 WITH daily_transactions AS (
-                    SELECT 
+                    SELECT
                         DATE(it.transaction_timestamp) as transaction_date,
                         SUM(it.quantity_change) as daily_change
-                    FROM inventory_transactions it
-                    JOIN products p ON it.product_id = p.product_id
-                    WHERE p.sku = %s 
-                    AND it.warehouse_id = %s 
+                    FROM {schema}.inventory_transactions it
+                    JOIN {schema}.products p ON it.product_id = p.product_id
+                    WHERE p.sku = %s
+                    AND it.warehouse_id = %s
                     AND it.transaction_timestamp >= CURRENT_DATE - INTERVAL '%s days'
                     AND it.status = 'confirmed'
                     GROUP BY DATE(it.transaction_timestamp)
@@ -189,7 +192,7 @@ async def get_inventory_history(
                 'date': row['history_date'].strftime('%Y-%m-%d'),
                 'stock_level': row['stock_level']
             })
-        
+
         return history_data
         
     except Exception as e:
@@ -200,13 +203,14 @@ async def get_inventory_history(
 async def get_stock_alerts_kpi():
     """Get KPI metrics for stock management alerts."""
     try:
-        query = """
+        schema = os.getenv('DB_SCHEMA', 'public')
+        query = f"""
             SELECT
                 SUM(CASE WHEN current_stock < forecast_30_days AND current_stock >= (forecast_30_days * 0.5) THEN 1 ELSE 0 END) as low_stock_items,
                 SUM(CASE WHEN current_stock = 0 THEN 1 ELSE 0 END) as out_of_stock_items,
                 SUM(CASE WHEN current_stock < (forecast_30_days * 0.5) AND current_stock > 0 THEN 1 ELSE 0 END) as reorder_needed_items,
                 SUM(CASE WHEN current_stock < forecast_30_days THEN 1 ELSE 0 END) as total_alerts
-            FROM inventory_forecast
+            FROM {schema}.inventory_forecast
         """
 
         result = db.execute_query(query)
@@ -278,11 +282,12 @@ async def update_inventory_forecast(forecast_id: int, forecast_update: Inventory
             raise HTTPException(status_code=404, detail="Forecast record not found")
 
         # Return updated forecast
+        schema = os.getenv('DB_SCHEMA', 'public')
         result = db.execute_query(
-            """
+            f"""
             SELECT f.*, p.name as product_name, p.sku as product_sku
-            FROM inventory_forecast f
-            JOIN products p ON f.product_id = p.product_id
+            FROM {schema}.inventory_forecast f
+            JOIN {schema}.products p ON f.product_id = p.product_id
             WHERE f.forecast_id = %s
             """,
             [forecast_id]

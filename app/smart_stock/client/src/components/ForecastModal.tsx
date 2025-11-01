@@ -116,40 +116,21 @@ const ForecastModal: React.FC<ForecastModalProps> = ({
       generateFutureForecast(data, item);
       
     } catch (error) {
-      console.warn('Failed to fetch historical data (possibly no data available), using fallback:', error);
-      
-      // Fallback to mock data if API call fails
+      console.error('Failed to fetch historical data:', error);
+
+      // If API fails, show empty chart with just current point
       const data: ForecastDataPoint[] = [];
       const today = new Date();
-      let pastStock = Math.round(item.stock * 1.3); // Start higher in the past
-      
-      for (let day = -30; day <= 0; day++) {
-        const date = new Date(today);
-        date.setDate(today.getDate() + day);
-        
-        if (day === 0) {
-          data.push({
-            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            day: day,
-            pastStock: item.stock,
-            forecastStock: item.stock,
-          });
-        } else {
-          const progress = (30 + day) / 30;
-          const stockLevel = Math.round(
-            pastStock - ((pastStock - item.stock) * progress) + 
-            (Math.random() - 0.5) * 4
-          );
-          
-          data.push({
-            date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            day: day,
-            pastStock: Math.max(0, stockLevel),
-          });
-        }
-      }
-      
-      // Generate future forecast for fallback data too
+
+      // Add just the current day point
+      data.push({
+        date: today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        day: 0,
+        pastStock: item.stock,
+        forecastStock: item.stock,
+      });
+
+      // Still generate future forecast based on current stock
       generateFutureForecast(data, item);
     }
   };
