@@ -1,0 +1,1316 @@
+{
+  "datasets": [
+    {
+      "name": "18e48fb5",
+      "displayName": "On-Time Production Rate",
+      "queryLines": [
+        "with fact_inventory_transactions as (\n",
+        "SELECT \n",
+        "            CAST(t.transaction_id AS BIGINT) as transaction_id,\n",
+        "            CAST(t.transaction_number AS VARCHAR(50)) as transaction_number,\n",
+        "            CAST(t.transaction_type AS VARCHAR(50)) as transaction_type,\n",
+        "            CAST(t.status AS VARCHAR(20)) as status,\n",
+        "            CAST(t.quantity_change AS INTEGER) as quantity_change,\n",
+        "            COALESCE(t.notes, '') as notes,\n",
+        "            t.transaction_timestamp,\n",
+        "            CAST(t.product_id AS INTEGER) as product_id,\n",
+        "            CAST(p.name AS VARCHAR(200)) as product_name,\n",
+        "            CAST(p.category AS VARCHAR(50)) as category,\n",
+        "            CAST(p.price AS DECIMAL(10,2)) as price,\n",
+        "            CAST(t.warehouse_id AS INTEGER) as warehouse_id,\n",
+        "            CAST(w.name AS VARCHAR(100)) as warehouse_name,\n",
+        "            CAST(w.location AS VARCHAR(200)) as warehouse_location\n",
+        "        FROM fact_inventory_transactions t\n",
+        "        JOIN dim_products p ON t.product_id = p.product_id\n",
+        "        JOIN dim_warehouses w ON t.warehouse_id = w.warehouse_id\n",
+        "),\n",
+        "simple_metrics AS (\n",
+        "    SELECT \n",
+        "        -- Current 30 days\n",
+        "        COUNT(CASE WHEN DATE(transaction_timestamp) > CURRENT_DATE - INTERVAL '30 days' \n",
+        "              THEN 1 END) as current_orders,\n",
+        "        COUNT(CASE WHEN DATE(transaction_timestamp) > CURRENT_DATE - INTERVAL '30 days' \n",
+        "              AND status = 'delivered' THEN 1 END) as current_on_time,\n",
+        "        \n",
+        "        -- Previous 30 days\n",
+        "        COUNT(CASE WHEN DATE(transaction_timestamp) > CURRENT_DATE - INTERVAL '60 days'\n",
+        "              AND DATE(transaction_timestamp) <= CURRENT_DATE - INTERVAL '30 days'\n",
+        "              THEN 1 END) as previous_orders,\n",
+        "        COUNT(CASE WHEN DATE(transaction_timestamp) > CURRENT_DATE - INTERVAL '60 days'\n",
+        "              AND DATE(transaction_timestamp) <= CURRENT_DATE - INTERVAL '30 days'\n",
+        "              AND status = 'delivered' THEN 1 END) as previous_on_time\n",
+        "              \n",
+        "    FROM fact_inventory_transactions\n",
+        "    WHERE transaction_type = 'sale'\n",
+        "      AND transaction_timestamp >= CURRENT_DATE - INTERVAL '60 days'\n",
+        ")\n",
+        "SELECT \n",
+        "    -- Key metrics in one row\n",
+        "    ROUND(100.0 * current_on_time / NULLIF(current_orders, 0), 1) as otpr_last_30d,\n",
+        "    ROUND(100.0 * previous_on_time / NULLIF(previous_orders, 0), 1) as otpr_prev_30d,\n",
+        "    \n",
+        "    ROUND(100.0 * current_on_time / NULLIF(current_orders, 0), 1) -\n",
+        "    ROUND(100.0 * previous_on_time / NULLIF(previous_orders, 0), 1) as change_ppt,\n",
+        "    \n",
+        "    CASE \n",
+        "        WHEN current_on_time::float / NULLIF(current_orders, 0) > \n",
+        "             previous_on_time::float / NULLIF(previous_orders, 0) THEN '↑'\n",
+        "        WHEN current_on_time::float / NULLIF(current_orders, 0) < \n",
+        "             previous_on_time::float / NULLIF(previous_orders, 0) THEN '↓'\n",
+        "        ELSE '→'\n",
+        "    END as trend\n",
+        "    \n",
+        "FROM simple_metrics;"
+      ],
+      "catalog": "demo_nnguyen",
+      "schema": "smartstock"
+    },
+    {
+      "name": "a4c6b30f",
+      "displayName": "Inventory Turn Over",
+      "queryLines": [
+        "WITH consumption_data AS (\n",
+        "    SELECT \n",
+        "        it.product_id,\n",
+        "        ABS(SUM(it.quantity_change)) as units_consumed,\n",
+        "        ABS(SUM(it.quantity_change * p.price)) as value_consumed\n",
+        "    FROM fact_inventory_transactions it\n",
+        "    JOIN dim_products p ON it.product_id = p.product_id\n",
+        "    WHERE it.transaction_type = 'sale'\n",
+        "        AND it.status = 'delivered'\n",
+        "    GROUP BY it.product_id\n",
+        "),\n",
+        "avg_inventory AS (\n",
+        "    SELECT \n",
+        "        ih.product_id,\n",
+        "        AVG(ih.inventory_level) as avg_units,\n",
+        "        AVG(ih.inventory_level * p.price) as avg_value\n",
+        "    FROM fact_inventory_daily_snapshot ih\n",
+        "    JOIN dim_products p ON ih.product_id = p.product_id\n",
+        "    GROUP BY ih.product_id\n",
+        ")\n",
+        "SELECT \n",
+        "    -- Overall KPIs\n",
+        "    ROUND(cast(SUM(c.value_consumed) as numeric), 2) as total_consumption_value,\n",
+        "    ROUND(cast(SUM(ai.avg_value) as numeric), 2) as total_avg_inventory_value,\n",
+        "    ROUND(SUM(c.value_consumed) / NULLIF(SUM(ai.avg_value), 0), 2) as overall_inventory_turnover,\n",
+        "    ROUND(cast(365.0 / NULLIF(SUM(c.value_consumed) / NULLIF(SUM(ai.avg_value), 0), 0) as numeric), 0) as overall_days_on_hand,\n",
+        "    \n",
+        "    -- Additional metrics\n",
+        "    COUNT(DISTINCT c.product_id) as active_products,\n",
+        "    ROUND(SUM(c.units_consumed), 0) as total_units_consumed,\n",
+        "    ROUND(SUM(ai.avg_units), 0) as total_avg_units\n",
+        "FROM consumption_data c\n",
+        "JOIN avg_inventory ai ON c.product_id = ai.product_id;"
+      ],
+      "catalog": "demo_nnguyen",
+      "schema": "smartstock"
+    },
+    {
+      "name": "567a4ae4",
+      "displayName": "Inventory Turn Over by Products",
+      "queryLines": [
+        "WITH consumption_data AS (\n",
+        "    SELECT \n",
+        "        it.product_id,\n",
+        "        p.name AS product_name,\n",
+        "        p.category AS product_category,\n",
+        "        ABS(SUM(it.quantity_change)) as units_consumed,\n",
+        "        ABS(SUM(it.quantity_change * p.price)) as value_consumed\n",
+        "    FROM fact_inventory_transactions it\n",
+        "    JOIN dim_products p ON it.product_id = p.product_id\n",
+        "    WHERE it.transaction_type = 'sale'\n",
+        "        AND it.status = 'delivered'\n",
+        "        AND it.transaction_timestamp >= :start_date AND it.transaction_timestamp <= :end_date\n",
+        "        and p.name <> 'UNKNOWN_PRODUCT'\n",
+        "    GROUP BY it.product_id, product_name, product_category\n",
+        "),\n",
+        "avg_inventory AS (\n",
+        "    SELECT \n",
+        "        ih.product_id,\n",
+        "        p.name AS product_name,\n",
+        "        p.category AS product_category,\n",
+        "        AVG(ih.inventory_level) as avg_units,\n",
+        "        AVG(ih.inventory_level * p.price) as avg_value\n",
+        "    FROM fact_inventory_daily_snapshot ih\n",
+        "    JOIN dim_products p ON ih.product_id = p.product_id\n",
+        "    WHERE p.name <> 'UNKNOWN_PRODUCT' AND ih.snapshot_date >= :start_date AND ih.snapshot_date <= :end_date\n",
+        "    GROUP BY ih.product_id, product_name, product_category\n",
+        ")\n",
+        "SELECT \n",
+        "    -- Overall KPIs\n",
+        "    c.product_id,\n",
+        "    c.product_name,\n",
+        "    c.product_category,\n",
+        "    ROUND(cast(SUM(c.value_consumed) as numeric), 2) as total_consumption_value,\n",
+        "    ROUND(cast(SUM(ai.avg_value) as numeric), 2) as total_avg_inventory_value,\n",
+        "    ROUND(SUM(c.value_consumed) / NULLIF(SUM(ai.avg_value), 0), 2) as overall_inventory_turnover,\n",
+        "    ROUND(cast(365.0 / NULLIF(SUM(c.value_consumed) / NULLIF(SUM(ai.avg_value), 0), 0) as numeric), 0) as overall_days_on_hand\n",
+        "FROM consumption_data c\n",
+        "JOIN avg_inventory ai ON c.product_id = ai.product_id AND c.product_name = ai.product_name\n",
+        "GROUP BY c.product_id, c.product_name, c.product_category;"
+      ],
+      "parameters": [
+        {
+          "displayName": "start_date",
+          "keyword": "start_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now-30d/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "end_date",
+          "keyword": "end_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "catalog": "demo_nnguyen",
+      "schema": "smartstock"
+    },
+    {
+      "name": "c62999f4",
+      "displayName": "Products",
+      "queryLines": [
+        "SELECT DISTINCT name AS product_name FROM dim_products"
+      ],
+      "catalog": "demo_nnguyen",
+      "schema": "smartstock"
+    },
+    {
+      "name": "32f3f09e",
+      "displayName": "Warehouses",
+      "queryLines": [
+        "SELECT DISTINCT name AS warehouse_name FROM dim_warehouses"
+      ],
+      "catalog": "demo_nnguyen",
+      "schema": "smartstock"
+    },
+    {
+      "name": "0e1fb77c",
+      "displayName": "Demand by Month",
+      "queryLines": [
+        "WITH monthly_demand AS (\n",
+        "  SELECT \n",
+        "    DATE_TRUNC('month', transaction_timestamp) as month,\n",
+        "    p.category,\n",
+        "    SUM(CASE WHEN transaction_type = 'sale' THEN ABS(quantity_change) ELSE 0 END) as demand,\n",
+        "    EXTRACT(MONTH FROM transaction_timestamp) as month_number\n",
+        "  FROM fact_inventory_transactions it\n",
+        "  JOIN dim_products p ON it.product_id = p.product_id\n",
+        "  WHERE it.transaction_timestamp >= :start_date AND it.transaction_timestamp <= :end_date\n",
+        "  GROUP BY 1, 2, 4\n",
+        ")\n",
+        "SELECT \n",
+        "  month,\n",
+        "  category,\n",
+        "  demand,\n",
+        "  AVG(demand) OVER (\n",
+        "    PARTITION BY category, month_number \n",
+        "    ORDER BY month \n",
+        "    ROWS BETWEEN 2 PRECEDING AND CURRENT ROW\n",
+        "  ) as moving_avg,\n",
+        "  month_number\n",
+        "FROM monthly_demand\n",
+        "ORDER BY month, category"
+      ],
+      "parameters": [
+        {
+          "displayName": "start_date",
+          "keyword": "start_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now-365d/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "end_date",
+          "keyword": "end_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "catalog": "demo_nnguyen",
+      "schema": "smartstock"
+    },
+    {
+      "name": "9f499c5c",
+      "displayName": "Stock Level by Warehouse",
+      "queryLines": [
+        "WITH current_inventory AS (\n",
+        "  SELECT \n",
+        "    w.name AS warehouse_name,\n",
+        "    p.category AS product_category,\n",
+        "    p.name AS product_name,\n",
+        "    SUM(quantity_change) as current_stock,\n",
+        "    -- Assuming reorder level is 20% of max historical stock\n",
+        "    MAX(quantity_change) * 0.2 as reorder_level\n",
+        "  FROM fact_inventory_transactions it\n",
+        "  JOIN dim_warehouses w ON it.warehouse_id = w.warehouse_id\n",
+        "  JOIN dim_products p ON it.product_id = p.product_id\n",
+        "  WHERE it.transaction_timestamp >= :start_date AND it.transaction_timestamp <= :end_date\n",
+        "  GROUP BY 1, 2, 3\n",
+        ")\n",
+        "SELECT \n",
+        "  warehouse_name,\n",
+        "  COUNT(CASE WHEN current_stock <= 0 THEN 1 END) as critical_items,\n",
+        "  COUNT(CASE WHEN current_stock > 0 AND current_stock <= reorder_level THEN 1 END) as low_stock_items,\n",
+        "  COUNT(CASE WHEN current_stock > reorder_level AND current_stock <= reorder_level * 3 THEN 1 END) as optimal_stock_items,\n",
+        "  COUNT(CASE WHEN current_stock > reorder_level * 3 THEN 1 END) as overstock_items\n",
+        "FROM current_inventory\n",
+        "GROUP BY warehouse_name"
+      ],
+      "parameters": [
+        {
+          "displayName": "start_date",
+          "keyword": "start_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now-365d/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "end_date",
+          "keyword": "end_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "catalog": "demo_nnguyen",
+      "schema": "smartstock"
+    },
+    {
+      "name": "d1fb2f04",
+      "displayName": "Transaction Volume",
+      "queryLines": [
+        "SELECT \n",
+        "  transaction_type,\n",
+        "  w.name AS warehouse_name,\n",
+        "  COUNT(*) as transaction_count\n",
+        "FROM fact_inventory_transactions it \n",
+        "JOIN dim_warehouses w ON it.warehouse_id = w.warehouse_id\n",
+        "WHERE it.transaction_timestamp >= :start_date AND it.transaction_timestamp <= :end_date\n",
+        "GROUP BY transaction_type, warehouse_name\n",
+        "ORDER BY warehouse_name, transaction_count DESC"
+      ],
+      "parameters": [
+        {
+          "displayName": "start_date",
+          "keyword": "start_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now-365d/d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "displayName": "end_date",
+          "keyword": "end_date",
+          "dataType": "DATE",
+          "defaultSelection": {
+            "values": {
+              "dataType": "DATE",
+              "values": [
+                {
+                  "value": "now/d"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "catalog": "demo_nnguyen",
+      "schema": "smartstock"
+    }
+  ],
+  "pages": [
+    {
+      "name": "49e75744",
+      "displayName": "SmartStock",
+      "layout": [
+        {
+          "widget": {
+            "name": "e7b3d57a",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# <span style=\"font-size: 24px;\">VulcanTech Manufacturing - SmartStock</span>"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "ba14e764",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "18e48fb5",
+                  "fields": [
+                    {
+                      "name": "otpr_prev_30d",
+                      "expression": "`otpr_prev_30d`"
+                    },
+                    {
+                      "name": "otpr_last_30d",
+                      "expression": "`otpr_last_30d`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "otpr_last_30d",
+                  "style": {
+                    "rules": [
+                      {
+                        "condition": {
+                          "operator": ">=",
+                          "operand": {
+                            "type": "data-value",
+                            "value": "80"
+                          }
+                        },
+                        "color": "#00A972"
+                      },
+                      {
+                        "condition": {
+                          "operator": ">=",
+                          "operand": {
+                            "type": "data-value",
+                            "value": "60"
+                          }
+                        },
+                        "color": {
+                          "themeColorType": "visualizationColors",
+                          "position": 2
+                        }
+                      },
+                      {
+                        "condition": {
+                          "operator": ">=",
+                          "operand": {
+                            "type": "data-value",
+                            "value": "30"
+                          }
+                        },
+                        "color": {
+                          "themeColorType": "visualizationColors",
+                          "position": 4
+                        }
+                      }
+                    ]
+                  }
+                },
+                "target": {
+                  "fieldName": "otpr_prev_30d",
+                  "style": {
+                    "rules": [
+                      {
+                        "condition": {
+                          "operator": ">=",
+                          "operand": {
+                            "type": "data-value",
+                            "value": "80"
+                          }
+                        },
+                        "color": "#00A972"
+                      },
+                      {
+                        "condition": {
+                          "operator": ">=",
+                          "operand": {
+                            "type": "data-value",
+                            "value": "60"
+                          }
+                        },
+                        "color": {
+                          "themeColorType": "visualizationColors",
+                          "position": 2
+                        }
+                      },
+                      {
+                        "condition": {
+                          "operator": ">=",
+                          "operand": {
+                            "type": "data-value",
+                            "value": "30"
+                          }
+                        },
+                        "color": {
+                          "themeColorType": "visualizationColors",
+                          "position": 4
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "On-Time Production Rate",
+                "description": "OTPR in the last 30 days compared to the previous 30 days"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "4c31e00d",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "a4c6b30f",
+                  "fields": [
+                    {
+                      "name": "overall_inventory_turnover",
+                      "expression": "`overall_inventory_turnover`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "overall_inventory_turnover"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Inventory Turn-Over"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "1aef11ff",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "a4c6b30f",
+                  "fields": [
+                    {
+                      "name": "overall_days_on_hand",
+                      "expression": "`overall_days_on_hand`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "overall_days_on_hand"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Days on hand"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "0b909bc1",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "567a4ae4",
+                  "fields": [
+                    {
+                      "name": "product_name",
+                      "expression": "`product_name`"
+                    },
+                    {
+                      "name": "sum(overall_inventory_turnover)",
+                      "expression": "SUM(`overall_inventory_turnover`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  },
+                  "displayName": "Product"
+                },
+                "y": {
+                  "fieldName": "sum(overall_inventory_turnover)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Inventory Turnover"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": false
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "fa0c3eec",
+            "queries": [
+              {
+                "name": "dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b5abdb5d13daaeb8ce7946e69896_warehouse_name",
+                "query": {
+                  "datasetName": "32f3f09e",
+                  "fields": [
+                    {
+                      "name": "warehouse_name",
+                      "expression": "`warehouse_name`"
+                    },
+                    {
+                      "name": "warehouse_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "warehouse_name",
+                    "queryName": "dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b5abdb5d13daaeb8ce7946e69896_warehouse_name"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Warehouse"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 1,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "a5428ba1",
+            "queries": [
+              {
+                "name": "dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b5abc6fc1cc69ab4f0ea9b91c073_product_name",
+                "query": {
+                  "datasetName": "c62999f4",
+                  "fields": [
+                    {
+                      "name": "product_name",
+                      "expression": "`product_name`"
+                    },
+                    {
+                      "name": "product_name_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "product_name",
+                    "queryName": "dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b5abc6fc1cc69ab4f0ea9b91c073_product_name"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Product"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 1,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "711f076e",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "567a4ae4",
+                  "fields": [
+                    {
+                      "name": "sum(total_consumption_value)",
+                      "expression": "SUM(`total_consumption_value`)"
+                    },
+                    {
+                      "name": "product_category",
+                      "expression": "`product_category`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "sum(total_consumption_value)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Total Units Consumed"
+                },
+                "color": {
+                  "fieldName": "product_category",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "legend": {
+                    "position": "right"
+                  },
+                  "displayName": "Category"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "3623cdee",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "567a4ae4",
+                  "fields": [
+                    {
+                      "name": "sum(overall_days_on_hand)",
+                      "expression": "SUM(`overall_days_on_hand`)"
+                    },
+                    {
+                      "name": "product_name",
+                      "expression": "`product_name`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "sum(overall_days_on_hand)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Days on Hand"
+                },
+                "y": {
+                  "fieldName": "product_name",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  },
+                  "displayName": "Product"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 14,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "start-date",
+            "queries": [
+              {
+                "name": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b5aad2f714c38c67f831091a13bc_start_date",
+                "query": {
+                  "datasetName": "567a4ae4",
+                  "parameters": [
+                    {
+                      "name": "start_date",
+                      "keyword": "start_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b890c7cf1a3288498176406994a8_start_date",
+                "query": {
+                  "datasetName": "0e1fb77c",
+                  "parameters": [
+                    {
+                      "name": "start_date",
+                      "keyword": "start_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b893079017f3b0c47a62675ffa06_start_date",
+                "query": {
+                  "datasetName": "d1fb2f04",
+                  "parameters": [
+                    {
+                      "name": "start_date",
+                      "keyword": "start_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b89191ea13c79d76b7e5922580ef_start_date",
+                "query": {
+                  "datasetName": "9f499c5c",
+                  "parameters": [
+                    {
+                      "name": "start_date",
+                      "keyword": "start_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "parameterName": "start_date",
+                    "queryName": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b5aad2f714c38c67f831091a13bc_start_date"
+                  },
+                  {
+                    "parameterName": "start_date",
+                    "queryName": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b890c7cf1a3288498176406994a8_start_date"
+                  },
+                  {
+                    "parameterName": "start_date",
+                    "queryName": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b893079017f3b0c47a62675ffa06_start_date"
+                  },
+                  {
+                    "parameterName": "start_date",
+                    "queryName": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b89191ea13c79d76b7e5922580ef_start_date"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Start Date"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "end-date-1",
+            "queries": [
+              {
+                "name": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b5aad2f714c38c67f831091a13bc_end_date",
+                "query": {
+                  "datasetName": "567a4ae4",
+                  "parameters": [
+                    {
+                      "name": "end_date",
+                      "keyword": "end_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b890c7cf1a3288498176406994a8_end_date",
+                "query": {
+                  "datasetName": "0e1fb77c",
+                  "parameters": [
+                    {
+                      "name": "end_date",
+                      "keyword": "end_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b89191ea13c79d76b7e5922580ef_end_date",
+                "query": {
+                  "datasetName": "9f499c5c",
+                  "parameters": [
+                    {
+                      "name": "end_date",
+                      "keyword": "end_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b893079017f3b0c47a62675ffa06_end_date",
+                "query": {
+                  "datasetName": "d1fb2f04",
+                  "parameters": [
+                    {
+                      "name": "end_date",
+                      "keyword": "end_date"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-date-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "parameterName": "end_date",
+                    "queryName": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b5aad2f714c38c67f831091a13bc_end_date"
+                  },
+                  {
+                    "parameterName": "end_date",
+                    "queryName": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b890c7cf1a3288498176406994a8_end_date"
+                  },
+                  {
+                    "parameterName": "end_date",
+                    "queryName": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b89191ea13c79d76b7e5922580ef_end_date"
+                  },
+                  {
+                    "parameterName": "end_date",
+                    "queryName": "parameter_dashboards/01f0b5a263581d55a2343f75a6b7b5c5/datasets/01f0b893079017f3b0c47a62675ffa06_end_date"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "End Date"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 0,
+            "width": 2,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "e8635e8b",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "0e1fb77c",
+                  "fields": [
+                    {
+                      "name": "category",
+                      "expression": "`category`"
+                    },
+                    {
+                      "name": "monthly(month)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `month`)"
+                    },
+                    {
+                      "name": "sum(demand)",
+                      "expression": "SUM(`demand`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "monthly(month)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "axis": {
+                    "hideTitle": true
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(demand)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Total number of demands"
+                },
+                "color": {
+                  "fieldName": "category",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Category"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 20,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "3d253efc",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "9f499c5c",
+                  "fields": [
+                    {
+                      "name": "warehouse_name",
+                      "expression": "`warehouse_name`"
+                    },
+                    {
+                      "name": "sum(critical_items)",
+                      "expression": "SUM(`critical_items`)"
+                    },
+                    {
+                      "name": "sum(low_stock_items)",
+                      "expression": "SUM(`low_stock_items`)"
+                    },
+                    {
+                      "name": "sum(optimal_stock_items)",
+                      "expression": "SUM(`optimal_stock_items`)"
+                    },
+                    {
+                      "name": "sum(overstock_items)",
+                      "expression": "SUM(`overstock_items`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "warehouse_name",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Warehouse"
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "fields": [
+                    {
+                      "fieldName": "sum(critical_items)",
+                      "displayName": "Critical Items"
+                    },
+                    {
+                      "fieldName": "sum(low_stock_items)",
+                      "displayName": "Low Stock Items"
+                    },
+                    {
+                      "fieldName": "sum(optimal_stock_items)",
+                      "displayName": "Optimal Stock Items"
+                    },
+                    {
+                      "fieldName": "sum(overstock_items)",
+                      "displayName": "Overstock Items"
+                    }
+                  ],
+                  "axis": {
+                    "hideTitle": false,
+                    "title": "Number of items"
+                  }
+                },
+                "color": {
+                  "legend": {
+                    "position": "bottom"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 26,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "8d787ba8",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d1fb2f04",
+                  "fields": [
+                    {
+                      "name": "warehouse_name",
+                      "expression": "`warehouse_name`"
+                    },
+                    {
+                      "name": "sum(transaction_count)",
+                      "expression": "SUM(`transaction_count`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "warehouse_name",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Warehouse"
+                },
+                "y": {
+                  "fieldName": "sum(transaction_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Number of transactions"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 32,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "db4ae65e",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d1fb2f04",
+                  "fields": [
+                    {
+                      "name": "sum(transaction_count)",
+                      "expression": "SUM(`transaction_count`)"
+                    },
+                    {
+                      "name": "transaction_type",
+                      "expression": "`transaction_type`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "sum(transaction_count)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Total number of transactions"
+                },
+                "color": {
+                  "fieldName": "transaction_type",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "legend": {
+                    "position": "bottom"
+                  },
+                  "displayName": "Transaction Type"
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 27,
+            "width": 3,
+            "height": 11
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "genieSpace": {
+      "isEnabled": false
+    }
+  }
+}
