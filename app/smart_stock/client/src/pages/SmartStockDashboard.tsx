@@ -53,36 +53,13 @@ import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-
-// Elena's KPIs
-interface ElenaKPIs {
-  onTimeProductionRate: number;
-  onTimeProductionRatePrev: number;
-  onTimeProductionChange: number;
-  onTimeProductionTrend: string;
-  inventoryTurnoverRatio: number;
-  inventoryTurnoverPrev: number;
-  inventoryTurnoverChange: number;
-  inventoryTurnoverTrend: string;
-  expeditedShipmentsCost: number;
-  daysOfStockOnHand: number;
-}
-
-interface WarehouseData {
-  name: string;
-  location: string;
-  transactionCount: number;
-  inboundUnits: number;
-  salesUnits: number;
-  capacityUsed: number;
-  lastAudit: string;
-  activeProducts: number;
-}
+import Homepage from './Homepage';
+import { ElenaKPIs, WarehouseData } from '@/types';
 
 const SmartStockDashboard: React.FC = () => {
   const { displayName, role } = useUserInfo();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('transactions');
+  const [activeTab, setActiveTab] = useState('homepage');
   const [kpis, setKpis] = useState<ElenaKPIs>({
     onTimeProductionRate: 0,
     onTimeProductionRatePrev: 0,
@@ -786,238 +763,38 @@ const SmartStockDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Critical Alerts Section */}
-      {criticalAlerts > 0 && (
-        <div className="container mx-auto px-4 py-4">
-          <Alert className="bg-red-50 border-red-200">
-            <AlertTriangle className="h-4 w-4 text-red-600" />
-            <AlertTitle className="text-red-900">Action Required</AlertTitle>
-            <AlertDescription className="text-red-700">
-              {criticalAlerts} components need immediate attention{alertCounts.warning > 0 && ` and ${alertCounts.warning} require monitoring`} - check the forecast tab for details
-            </AlertDescription>
-          </Alert>
-        </div>
-      )}
+      {/* Critical Alerts Section - Moved to Homepage Daily Brief */}
 
-      {/* KPI Cards - Elena's Metrics */}
-      <div className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card className={`${
-            kpis.onTimeProductionChange > 0 ? 'border-green-200 bg-green-50' :
-            kpis.onTimeProductionChange < 0 ? 'border-red-200 bg-red-50' :
-            'border-gray-200 bg-gray-50'
-          }`}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className={`text-sm font-medium ${
-                  kpis.onTimeProductionChange > 0 ? 'text-green-900' :
-                  kpis.onTimeProductionChange < 0 ? 'text-red-900' :
-                  'text-gray-900'
-                }`}>
-                  On-Time Production Rate
-                </CardTitle>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={refreshOTPR}
-                    disabled={otprLoading}
-                    className="p-1 hover:bg-white/50 rounded transition-colors"
-                    title="Refresh OTPR"
-                  >
-                    {otprLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 text-gray-600 hover:text-gray-800" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('analytics')}
-                    className="p-1 hover:bg-white/50 rounded transition-colors"
-                    title="View Analytics"
-                  >
-                    <BarChart3 className="w-4 h-4 text-gray-600 hover:text-gray-800" />
-                  </button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className={`text-2xl font-bold ${
-                    kpis.onTimeProductionChange > 0 ? 'text-green-700' :
-                    kpis.onTimeProductionChange < 0 ? 'text-red-700' :
-                    'text-gray-700'
-                  }`}>
-                    {kpisLoading ? (
-                      <span className="inline-flex items-center">
-                        <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                        Updating...
-                      </span>
-                    ) : (
-                      `${kpis.onTimeProductionRate.toFixed(1)}%`
-                    )}
-                  </span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`text-sm font-medium flex items-center ${
-                      kpis.onTimeProductionChange > 0 ? 'text-green-600' :
-                      kpis.onTimeProductionChange < 0 ? 'text-red-600' :
-                      'text-gray-600'
-                    }`}>
-                      <span className="mr-1">{kpis.onTimeProductionTrend}</span>
-                      {kpis.onTimeProductionChange >= 0 ? '+' : ''}{kpis.onTimeProductionChange.toFixed(1)}%
-                    </span>
-                    <span className="text-xs text-gray-500">vs prev 30 days</span>
-                  </div>
-                </div>
-                {kpis.onTimeProductionChange > 0 ? (
-                  <TrendingUp className="w-5 h-5 text-green-600" />
-                ) : kpis.onTimeProductionChange < 0 ? (
-                  <TrendingDown className="w-5 h-5 text-red-600" />
-                ) : (
-                  <ArrowRight className="w-5 h-5 text-gray-600" />
-                )}
-              </div>
-              <Progress
-                value={kpis.onTimeProductionRate}
-                className={`mt-2 ${
-                  kpis.onTimeProductionChange > 0 ? '[&>div]:bg-green-600' :
-                  kpis.onTimeProductionChange < 0 ? '[&>div]:bg-red-600' :
-                  '[&>div]:bg-gray-600'
-                }`}
-              />
-              <p className="text-xs text-gray-600 mt-2">
-                Previous 30 days: {kpis.onTimeProductionRatePrev.toFixed(1)}%
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-blue-200 bg-blue-50">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-blue-900">
-                  Inventory Turnover
-                </CardTitle>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={refreshInventoryTurnover}
-                    disabled={turnoverLoading}
-                    className="p-1 hover:bg-white/50 rounded transition-colors"
-                    title="Refresh Inventory Turnover"
-                  >
-                    {turnoverLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 text-gray-600 hover:text-gray-800" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('analytics')}
-                    className="p-1 hover:bg-white/50 rounded transition-colors"
-                    title="View Analytics"
-                  >
-                    <BarChart3 className="w-4 h-4 text-gray-600 hover:text-gray-800" />
-                  </button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold text-blue-700">
-                  {kpis.inventoryTurnoverRatio}x
-                </span>
-                <TrendingUp className="w-5 h-5 text-blue-600" />
-              </div>
-              <p className="text-xs text-blue-600 mt-1">Target: 32x to 40x</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-orange-200 bg-orange-50">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-orange-900">
-                  Expedited Costs (MTD)
-                </CardTitle>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={refreshExpeditedCosts}
-                    disabled={expeditedLoading}
-                    className="p-1 hover:bg-white/50 rounded transition-colors"
-                    title="Refresh Expedited Costs"
-                  >
-                    {expeditedLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 text-gray-600 hover:text-gray-800" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('analytics')}
-                    className="p-1 hover:bg-white/50 rounded transition-colors"
-                    title="View Analytics"
-                  >
-                    <BarChart3 className="w-4 h-4 text-gray-600 hover:text-gray-800" />
-                  </button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold text-orange-700">
-                  €{kpis.expeditedShipmentsCost.toLocaleString()}
-                </span>
-                <Truck className="w-5 h-5 text-orange-600" />
-              </div>
-              <p className="text-xs text-orange-600 mt-1">+23% vs last month</p>
-            </CardContent>
-          </Card>
-
-          <Card className="border-purple-200 bg-purple-50">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium text-purple-900">
-                  Days of Stock
-                </CardTitle>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={refreshDaysOfStock}
-                    disabled={daysOfStockLoading}
-                    className="p-1 hover:bg-white/50 rounded transition-colors"
-                    title="Refresh Days of Stock"
-                  >
-                    {daysOfStockLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-gray-600" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 text-gray-600 hover:text-gray-800" />
-                    )}
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('analytics')}
-                    className="p-1 hover:bg-white/50 rounded transition-colors"
-                    title="View Analytics"
-                  >
-                    <BarChart3 className="w-4 h-4 text-gray-600 hover:text-gray-800" />
-                  </button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold text-purple-700">
-                  {kpis.daysOfStockOnHand} days
-                </span>
-                <Clock className="w-5 h-5 text-purple-600" />
-              </div>
-              <p className="text-xs text-purple-600 mt-1">Target: 15-20 days</p>
-            </CardContent>
-          </Card>
-        </div>
 
         {/* Main Content Tabs */}
+      <div className="container mx-auto px-4 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="homepage">Homepage</TabsTrigger>
             <TabsTrigger value="transactions">Inventory Transactions</TabsTrigger>
             <TabsTrigger value="analytics">Inventory Analytics</TabsTrigger>
             <TabsTrigger value="forecast">Inventory Forecast</TabsTrigger>
           </TabsList>
+
+          {/* Homepage Tab */}
+          <TabsContent value="homepage" className="space-y-4">
+            <Homepage
+              kpis={kpis}
+              kpisLoading={kpisLoading}
+              otprLoading={otprLoading}
+              turnoverLoading={turnoverLoading}
+              expeditedLoading={expeditedLoading}
+              daysOfStockLoading={daysOfStockLoading}
+              refreshOTPR={refreshOTPR}
+              refreshInventoryTurnover={refreshInventoryTurnover}
+              refreshExpeditedCosts={refreshExpeditedCosts}
+              refreshDaysOfStock={refreshDaysOfStock}
+              refreshData={loadDashboardData}
+              setActiveTab={setActiveTab}
+              criticalCount={alertCounts.critical}
+              warningCount={alertCounts.warning}
+            />
+          </TabsContent>
 
           {/* Inventory Transactions Tab */}
           <TabsContent value="transactions" className="space-y-4">
@@ -1837,12 +1614,12 @@ const SmartStockDashboard: React.FC = () => {
                       )}
                     </TableBody>
                   </Table>
-                    <Pagination
-                      pagination={forecastPagination}
-                      onPageChange={handleForecastPageChange}
-                      showPageSize={true}
-                      pageSizeOptions={[10, 20, 50, 100]}
-                    />
+                  <Pagination
+                    pagination={forecastPagination}
+                    onPageChange={handleForecastPageChange}
+                    showPageSize={true}
+                    pageSizeOptions={[10, 20, 50, 100]}
+                  />
                   </>
                 )}
               </CardContent>

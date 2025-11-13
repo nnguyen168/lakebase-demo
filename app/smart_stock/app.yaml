@@ -12,3 +12,9 @@ env:
     value: "lakebase_demo_app"
   - name: DB_PASSWORD
     value: "lakebasedemo2025"
+  - name: GENIE_SPACE_ID
+    value: "01f0b8993ae91634b351d60035aa7c31"
+  - name: DATABRICKS_HOST
+    value: "https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/"
+  - name: DATABRICKS_TOKEN
+    value: ${env.DATABRICKS_TOKEN}

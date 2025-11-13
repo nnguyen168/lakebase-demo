@@ -344,3 +344,51 @@ class BulkDeleteResponse(BaseModel):
     """Response model for bulk delete."""
     deleted_count: int
     message: str
+
+
+# Homepage Models
+class TrendingProduct(BaseModel):
+    """Trending product information."""
+    sku: str
+    name: str
+    trend: int  # Percentage change
+    sales: int  # Sales units
+
+
+class SupplierMetrics(BaseModel):
+    """Supplier performance metrics."""
+    supplier: str
+    avgDays: float  # Average delivery time in days
+    onTime: float  # On-time delivery percentage
+
+
+class WarehouseDetail(BaseModel):
+    """Detailed warehouse information."""
+    id: str
+    name: str
+    location: str
+    lat: float
+    lng: float
+    capacity: int
+    currentStock: int
+    status: str  # operational, maintenance, critical
+    manager: str
+    phone: str
+    recentIncidents: Optional[List[str]] = []
+    lastAudit: Optional[str] = None
+
+
+class DailySummary(BaseModel):
+    """Daily summary information."""
+    summary: str
+    timestamp: datetime
+
+
+class HomepageData(BaseModel):
+    """Complete homepage data response."""
+    dailySummary: str
+    trendingProducts: List[TrendingProduct]
+    supplierMetrics: List[SupplierMetrics]
+    warehouseDetails: List[WarehouseDetail]
+    criticalCount: int = 0
+    warningCount: int = 0
