@@ -10,6 +10,8 @@ from fastapi.staticfiles import StaticFiles
 
 from server.routers import router
 from server.routers import genie
+from server.routers import agent
+from server.routers import jobs
 
 
 # Load environment variables from .env.local if it exists
@@ -53,6 +55,8 @@ app.add_middleware(
 
 app.include_router(router, prefix='/api', tags=['api'])
 app.include_router(genie.router)
+app.include_router(agent.router)
+app.include_router(jobs.router)
 
 
 @app.get('/health')

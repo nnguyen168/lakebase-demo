@@ -1,4 +1,4 @@
-import React, { useEffect, useState, lazy, Suspense } from 'react';
+import React, { useEffect, useState, lazy, Suspense, useContext } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -6,7 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   TrendingUp, TrendingDown, Package, Clock, Truck, AlertTriangle,
   MapPin, Activity, ArrowUp, ArrowDown, Sparkles, BarChart3,
-  Calendar, Users, Factory, Info, RefreshCw, ArrowRight, Loader2
+  Calendar, Users, Factory, Info, RefreshCw, ArrowRight, Loader2, Bot, CheckCircle
 } from 'lucide-react';
 import { ElenaKPIs, TrendingProduct, SupplierMetrics, WarehouseDetail, HomepageData } from '@/types';
 import {
@@ -15,6 +15,7 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { FloatingGenieContext } from '@/App';
 
 // Lazy load the map component
 const LeafletWarehouseMap = lazy(() => import('@/components/LeafletWarehouseMap'));
@@ -52,6 +53,7 @@ const Homepage: React.FC<HomepageProps> = ({
   criticalCount: propCriticalCount,
   warningCount: propWarningCount
 }) => {
+  const floatingGenieRef = useContext(FloatingGenieContext);
   const [dailySummary, setDailySummary] = useState<string>('');
   const [trendingProducts, setTrendingProducts] = useState<TrendingProduct[]>([]);
   const [supplierMetrics, setSupplierMetrics] = useState<SupplierMetrics[]>([]);
@@ -59,6 +61,11 @@ const Homepage: React.FC<HomepageProps> = ({
   const [criticalCount, setCriticalCount] = useState<number>(propCriticalCount || 0);
   const [warningCount, setWarningCount] = useState<number>(propWarningCount || 0);
   const [isLoading, setIsLoading] = useState(true);
+  const [alertsLoading, setAlertsLoading] = useState(false);
+
+  const handleAskAI = () => {
+    floatingGenieRef?.current?.openWithMessage("Hello SmartStock AI, what's wrong with my inventory?");
+  };
 
   useEffect(() => {
     // Only fetch critical counts if not provided via props
@@ -79,7 +86,8 @@ const Homepage: React.FC<HomepageProps> = ({
     }
   }, [propCriticalCount, propWarningCount]);
 
-  const fetchCriticalCounts = async () => {
+  const fetchCriticalCounts = async (showLoading = false) => {
+    if (showLoading) setAlertsLoading(true);
     try {
       const response = await fetch('/api/homepage/critical-counts', {
         method: 'GET',
@@ -96,6 +104,8 @@ const Homepage: React.FC<HomepageProps> = ({
       }
     } catch (error) {
       console.error('Error fetching critical counts:', error);
+    } finally {
+      if (showLoading) setAlertsLoading(false);
     }
   };
 
@@ -430,22 +440,76 @@ const Homepage: React.FC<HomepageProps> = ({
         </Card>
       </div>
 
-      {/* Second: Critical Alerts Section with link to Inventory Forecast */}
-      {(criticalCount > 0 || warningCount > 0) && (
+      {/* Second: Inventory Status Section */}
+      {(criticalCount > 0 || warningCount > 0) ? (
         <Alert className="bg-red-50 border-red-200">
           <AlertTriangle className="h-4 w-4 text-red-600" />
-          <AlertTitle className="text-red-900">Action Required</AlertTitle>
+          <AlertTitle className="text-red-900 flex items-center justify-between">
+            <span>Action Required</span>
+            <button
+              onClick={() => fetchCriticalCounts(true)}
+              disabled={alertsLoading}
+              className="p-1 hover:bg-red-100 rounded transition-colors"
+              title="Refresh alerts"
+            >
+              {alertsLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-red-600" />
+              ) : (
+                <RefreshCw className="w-4 h-4 text-red-600 hover:text-red-800" />
+              )}
+            </button>
+          </AlertTitle>
           <AlertDescription className="text-red-700 flex items-center justify-between">
             <span>
               {criticalCount > 0 && <span>{criticalCount} components need immediate attention</span>}
               {criticalCount > 0 && warningCount > 0 && <span> and </span>}
               {warningCount > 0 && <span>{warningCount} require monitoring</span>}
             </span>
+            <div className="flex items-center gap-2 ml-4">
+              <button
+                onClick={handleAskAI}
+                className="text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-semibold px-4 py-2 rounded-lg flex items-center gap-2 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+              >
+                <Bot className="h-4 w-4" />
+                <span>Ask your AI</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('forecast')}
+                className="text-red-800 font-semibold hover:text-red-900 flex items-center gap-1 transition-colors"
+              >
+                View Details
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-900 flex items-center justify-between">
+            <span>Inventory Optimized</span>
+            <button
+              onClick={() => fetchCriticalCounts(true)}
+              disabled={alertsLoading}
+              className="p-1 hover:bg-green-100 rounded transition-colors"
+              title="Refresh alerts"
+            >
+              {alertsLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-green-600" />
+              ) : (
+                <RefreshCw className="w-4 h-4 text-green-600 hover:text-green-800" />
+              )}
+            </button>
+          </AlertTitle>
+          <AlertDescription className="text-green-700 flex items-center justify-between">
+            <span>
+              All inventory levels are healthy. No components require immediate attention or monitoring.
+            </span>
             <button
               onClick={() => setActiveTab('forecast')}
-              className="text-red-800 font-semibold hover:text-red-900 flex items-center gap-1 ml-4"
+              className="text-green-800 font-semibold hover:text-green-900 flex items-center gap-1 transition-colors ml-4"
             >
-              View Details
+              View Forecast
               <ArrowRight className="h-4 w-4" />
             </button>
           </AlertDescription>

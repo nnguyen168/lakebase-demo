@@ -16,6 +16,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "httpx>=0.28.1",
     "databricks-sdk>=0.71.0",
+    "openai>=1.0.0",  # For LLM calls via Databricks Foundation Model APIs
 ]
 requires-python = ">=3.11"
 
