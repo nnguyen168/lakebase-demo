@@ -1055,7 +1055,7 @@ class SmartStockAgent:
 
                     # Check if we've made many resolve_inventory_alert calls - if so, we should wrap up
                     resolve_calls = [tc for tc in tool_calls_made if tc["name"] == "resolve_inventory_alert"]
-                    if len(resolve_calls) >= 5 and iteration >= 8:
+                    if len(resolve_calls) >= 15 and iteration >= 8:
                         # We've created enough orders, force a summary
                         logger.info(f"Created {len(resolve_calls)} orders, forcing summary to avoid timeout")
                         content = self._build_tool_summary(tool_calls_made)

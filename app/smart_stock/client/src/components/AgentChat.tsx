@@ -10,6 +10,97 @@ interface Message {
   error?: string;
 }
 
+interface SuggestedAction {
+  label: string;
+  message: string;
+  icon: string;
+}
+
+// Demo flow detection - returns suggested action buttons based on conversation context
+const getDemoFlowSuggestions = (messages: Message[]): SuggestedAction[] => {
+  if (messages.length < 2) return [];
+  
+  // Find the last user message
+  const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
+  const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant' && m.status === 'completed');
+  
+  if (!lastUserMessage || !lastAssistantMessage) return [];
+  
+  const userContent = lastUserMessage.content.toLowerCase();
+  const assistantContent = lastAssistantMessage.content.toLowerCase();
+  
+  // Stage 1: After asking about inventory issues/alerts
+  const isAskingAboutInventory = 
+    userContent.includes("what's wrong") || 
+    userContent.includes("whats wrong") ||
+    userContent.includes("inventory") && (userContent.includes("issue") || userContent.includes("alert") || userContent.includes("problem") || userContent.includes("wrong")) ||
+    userContent.includes("stock") && (userContent.includes("issue") || userContent.includes("alert") || userContent.includes("problem"));
+  const hasAlertData = 
+    assistantContent.includes("urgent") || 
+    assistantContent.includes("alert") || 
+    assistantContent.includes("stockout") || 
+    assistantContent.includes("risk") ||
+    assistantContent.includes("days until") ||
+    assistantContent.includes("reorder point") ||
+    assistantContent.includes("low stock");
+  
+  if (isAskingAboutInventory && hasAlertData) {
+    return [
+      { icon: '💰', label: "What's the financial impact?", message: "What's the financial impact of the stockout?" },
+      { icon: '📦', label: 'Show reorder options', message: 'What are my options for reordering?' },
+    ];
+  }
+  
+  // Stage 2: After asking about financial impact
+  const isAskingAboutImpact = 
+    userContent.includes("financial impact") || 
+    userContent.includes("financial") && userContent.includes("impact") ||
+    userContent.includes("stockout") && userContent.includes("impact") ||
+    userContent.includes("cost") && userContent.includes("stockout");
+  const hasFinancialData = 
+    assistantContent.includes("€") || 
+    assistantContent.includes("eur") || 
+    assistantContent.includes("revenue") || 
+    assistantContent.includes("cost") ||
+    assistantContent.includes("impact") ||
+    assistantContent.includes("exposure");
+  
+  if (isAskingAboutImpact && hasFinancialData) {
+    return [
+      { icon: '📦', label: 'Show reorder options', message: 'What are my options for reordering?' },
+    ];
+  }
+  
+  // Stage 3: After asking about reorder options
+  // Check for various ways the agent might present options
+  const isAskingAboutOptions = userContent.includes("option") && (userContent.includes("reorder") || userContent.includes("order"));
+  const hasSupplierOptions = 
+    (assistantContent.includes("option a") || assistantContent.includes("option b") || assistantContent.includes("option c")) ||
+    (assistantContent.includes("eurobike") || assistantContent.includes("velotech") || assistantContent.includes("cyclecore")) ||
+    (assistantContent.includes("fastest") && assistantContent.includes("economical")) ||
+    (assistantContent.includes("supplier") && assistantContent.includes("total"));
+  
+  if (isAskingAboutOptions && hasSupplierOptions) {
+    return [
+      { icon: '⚡', label: 'Proceed with Option A (Fastest)', message: 'Please proceed with Option A' },
+      { icon: '⚖️', label: 'Proceed with Option B (Balanced)', message: 'Please proceed with Option B' },
+      { icon: '💵', label: 'Proceed with Option C (Economical)', message: 'Please proceed with Option C' },
+    ];
+  }
+  
+  // Stage 4: After order completion
+  if (
+    (userContent.includes("proceed") && userContent.includes("option")) &&
+    (assistantContent.includes("po-") || assistantContent.includes("order") && assistantContent.includes("created"))
+  ) {
+    return [
+      { icon: '🔍', label: 'Check for more issues', message: "Hello SmartStock AI, what's wrong with my inventory?" },
+    ];
+  }
+  
+  return [];
+}
+
 interface AgentChatProps {
   onClose?: () => void;
   initialMessage?: string;
@@ -22,6 +113,7 @@ export default function AgentChat({ onClose, initialMessage, onMessageSent, onNe
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showActionButtons, setShowActionButtons] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const hasProcessedInitialMessage = useRef(false);
@@ -62,6 +154,9 @@ export default function AgentChat({ onClose, initialMessage, onMessageSent, onNe
 
   const sendMessageWithContent = async (messageContent: string) => {
     if (!messageContent.trim() || isLoading) return;
+
+    // Hide action buttons when user sends any message
+    setShowActionButtons(false);
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -132,6 +227,9 @@ export default function AgentChat({ onClose, initialMessage, onMessageSent, onNe
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // Show action buttons again after assistant responds
+      setShowActionButtons(true);
     } catch (error) {
       // Remove loading message
       setMessages(prev => prev.filter(m => m.id !== loadingMessage.id));
@@ -474,6 +572,33 @@ export default function AgentChat({ onClose, initialMessage, onMessageSent, onNe
             </div>
           </div>
         )}
+
+        {/* Demo Flow Action Buttons - shown after assistant responses */}
+        {showActionButtons && !isLoading && messages.length > 1 && (() => {
+          const suggestions = getDemoFlowSuggestions(messages);
+          if (suggestions.length === 0) return null;
+          
+          return (
+            <div className="mt-4 mb-2">
+              <p className="text-sm text-gray-500 mb-3 flex items-center gap-2">
+                <span className="inline-block w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+                Quick actions:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map((action, index) => (
+                  <button
+                    key={index}
+                    onClick={() => sendMessageWithContent(action.message)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 hover:border-blue-300 rounded-lg text-sm text-blue-700 font-medium transition-all duration-200 hover:shadow-sm"
+                  >
+                    <span>{action.icon}</span>
+                    <span>{action.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         <div ref={messagesEndRef} />
       </div>
