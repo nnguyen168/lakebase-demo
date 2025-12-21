@@ -7,6 +7,27 @@ include:
   - resources/*.yml
   - resources/jobs/*.yml
 
+# Exclude unnecessary files from sync
+sync:
+  exclude:
+    - app/              # Databricks App (deployed separately)
+    - client/           # Unused client folder at root
+    - node_modules/
+    - "*/node_modules/"
+    - __pycache__/
+    - "*/__pycache__/"
+    - "*.pyc"
+    - .git/
+    - .github/
+    - "*.md"
+    - "*.lock"
+    - build/
+    - "*/build/"
+    - dist/
+    - .venv/
+    - .env*
+    - "*.log"
+
 variables:
   catalog_name:
     description: The catalog name to use for the Smart Stock application.
