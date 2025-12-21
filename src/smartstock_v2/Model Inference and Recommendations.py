@@ -209,4 +209,4 @@ rec_final \
 .withColumn("forecast_id", F.monotonically_increasing_id()) \
 .withColumn("status", F.lit("active")) \
 .withColumn("last_updated", F.lit(datetime.now())) \
-.write.mode('overwrite').option("mergeSchema", "true").saveAsTable(f"{catalog}.{schema}.inventory_forecast")
+.write.mode('overwrite').option("mergeSchema", "true").saveAsTable(f"{catalog}.{schema}.fact_inventory_forecast")
