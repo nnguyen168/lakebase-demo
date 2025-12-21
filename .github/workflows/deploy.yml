@@ -21,13 +21,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Databricks CLI
-        run: pip install databricks-cli
+      - name: Install Databricks CLI (New Version)
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+          databricks --version
 
       - name: Validate Bundle (Dev)
         run: databricks bundle validate -t dev
@@ -47,13 +44,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Databricks CLI
-        run: pip install databricks-cli
+      - name: Install Databricks CLI (New Version)
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+          databricks --version
 
       - name: Deploy to Dev
         run: databricks bundle deploy -t dev
@@ -79,13 +73,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Databricks CLI
-        run: pip install databricks-cli
+      - name: Install Databricks CLI (New Version)
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+          databricks --version
 
       - name: Deploy to Prod
         run: databricks bundle deploy -t prod
@@ -97,4 +88,3 @@ jobs:
         run: |
           echo "✅ Deployed to Production workspace" >> $GITHUB_STEP_SUMMARY
           echo "🔗 Host: ${{ secrets.DATABRICKS_HOST_PROD }}" >> $GITHUB_STEP_SUMMARY
-
