@@ -12,21 +12,15 @@ sync:
   exclude:
     - app/              # Databricks App (deployed separately)
     - client/           # Unused client folder at root
-    - node_modules/
-    - "*/node_modules/"
-    - __pycache__/
-    - "*/__pycache__/"
+    - "**/node_modules/"
+    - "**/__pycache__/"
     - "*.pyc"
     - .git/
     - .github/
     - "*.md"
     - "*.lock"
-    - build/
-    - "*/build/"
-    - dist/
-    - .venv/
-    - .env*
-    - "*.log"
+    - "**/build/"
+    - scripts/
 
 variables:
   catalog_name:
@@ -58,11 +52,12 @@ targets:
       inventory_forecast_pipeline_id: e69fb378-312a-4ec1-9765-03c6222c222d
     workspace:
       host: https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/
-      # Note: For local dev, use --profile flag or set DATABRICKS_CONFIG_PROFILE env var
-      # In CI/CD, DATABRICKS_HOST and DATABRICKS_TOKEN env vars are used
+      profile: fe-vm-nam
 
   prod:
     mode: production
+    run_as:
+      user_name: nam.nguyen@databricks.com
     variables:
       catalog_name: manufacturing
       lakebase_instance_name: smartstock
@@ -73,4 +68,5 @@ targets:
       inventory_forecast_pipeline_id: e69fb378-312a-4ec1-9765-03c6222c222d
     workspace:
       host: https://e2-demo-west.cloud.databricks.com/
+      profile: e2-demo-west
       root_path: "/Workspace/Demo Assets/Manufacturing/SmartStock - Inventory Management/smartstock"

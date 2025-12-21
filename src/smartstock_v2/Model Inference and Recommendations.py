@@ -25,6 +25,8 @@ dbutils.widgets.text("catalog", "demo_nnguyen")
 catalog = dbutils.widgets.get("catalog")
 dbutils.widgets.text("schema", "smartstock")
 schema = dbutils.widgets.get("schema")
+dbutils.widgets.text("env", "dev")
+env = dbutils.widgets.get("env")
 
 # COMMAND ----------
 

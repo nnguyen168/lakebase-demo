@@ -1,4 +1,13 @@
 # Databricks notebook source
+# At the top of each notebook
+dbutils.widgets.text("catalog", "demo_nnguyen")
+dbutils.widgets.text("env", "dev")
+
+catalog = dbutils.widgets.get("catalog")
+env = dbutils.widgets.get("env")
+
+# COMMAND ----------
+
 """
 Bronze Layer Data Generator - Simulates SAP ERP Raw Data
 Generates realistic SAP-like raw data with quality issues, duplicates, and inconsistencies
@@ -19,7 +28,7 @@ random.seed(42)
 
 # COMMAND ----------
 
-spark.sql("USE CATALOG demo_nnguyen")
+spark.sql(f"USE CATALOG {catalog}")
 spark.sql("USE SCHEMA smartstock")
 
 # COMMAND ----------

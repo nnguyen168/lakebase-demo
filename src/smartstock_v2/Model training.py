@@ -27,6 +27,8 @@ dbutils.widgets.text("schema", "smartstock")
 schema = dbutils.widgets.get("schema")
 dbutils.widgets.text("ml_artifact_volume", "ml_experiments")
 ml_artifact_volume = dbutils.widgets.get("ml_artifact_volume")
+dbutils.widgets.text("env", "dev")
+env = dbutils.widgets.get("env")
 
 experiment_name = "/Shared/smartstock_v2_sales_forecasting"
 

@@ -16,7 +16,6 @@ resources:
               spot_bid_price_percent: 100
             spark_env_vars:
               PYSPARK_PYTHON: /databricks/python3/bin/python3
-            data_security_mode: DATA_SECURITY_MODE_DEDICATED
             runtime_engine: PHOTON
             enable_elastic_disk: false
 
@@ -25,9 +24,19 @@ resources:
           run_job_task:
             job_id: ${resources.jobs.data_initialization.id}
 
-        - task_key: model_inference
+        - task_key: model_training
           depends_on:
             - task_key: data_generation
+          job_cluster_key: ml_cluster
+          notebook_task:
+            notebook_path: "../../src/smartstock_v2/Model training.py"
+            base_parameters:
+              catalog: ${var.catalog_name}
+              env: ${bundle.target}
+
+        - task_key: model_inference
+          depends_on:
+            - task_key: model_training
           job_cluster_key: ml_cluster
           notebook_task:
             notebook_path: "../../src/smartstock_v2/Model Inference and Recommendations.py"
