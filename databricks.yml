@@ -5,44 +5,50 @@ bundle:
 
 include:
   - resources/*.yml
+  - resources/jobs/*.yml
 
 variables:
   catalog_name:
     description: The catalog name to use for the Smart Stock application.
-    default: smart_stock
   lakebase_instance_name:
     description: The name of the Lakebase instance to use for the Smart Stock application.
-    default: smart-stock-db
+  dim_product_pipeline_id:
+    description: Pipeline ID for dim_product sync
+  dim_warehouse_pipeline_id:
+    description: Pipeline ID for dim_warehouse sync
+  fact_transactions_pipeline_id:
+    description: Pipeline ID for fact_transactions sync
+  inventory_historical_pipeline_id:
+    description: Pipeline ID for inventory_historical sync
+  inventory_forecast_pipeline_id:
+    description: Pipeline ID for inventory_forecast sync
 
 targets:
   dev:
-    # Development mode creates a development copy with prefixed resources
-    # and paused job schedules/triggers
     mode: development
     default: true
     variables:
-      catalog_name: smart_stock
+      catalog_name: demo_nnguyen
+      lakebase_instance_name: smartstock
+      dim_product_pipeline_id: 8dd276d7-ddaf-48c1-905f-cd06ee3513e0
+      dim_warehouse_pipeline_id: 0835f41e-4248-474c-802c-a8b892643d61
+      fact_transactions_pipeline_id: 41a42b76-489f-486e-8aa7-755d80a41f1d
+      inventory_historical_pipeline_id: bc27caff-b9bf-4af7-85d4-c7bbe178fa70
+      inventory_forecast_pipeline_id: e69fb378-312a-4ec1-9765-03c6222c222d
     workspace:
       host: https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/
-    permissions:
-      - user_name: lars.liahagen@databricks.com
-        level: CAN_MANAGE
-      - user_name: nam.nguyen@databricks.com
-        level: CAN_MANAGE
-      - user_name: fabien.contaminard@databricks.com
-        level: CAN_MANAGE
+      profile: fe-vm-nam
 
   prod:
     mode: production
     variables:
-      catalog_name: smart_stock
+      catalog_name: manufacturing
+      lakebase_instance_name: smartstock
+      dim_product_pipeline_id: 8dd276d7-ddaf-48c1-905f-cd06ee3513e0
+      dim_warehouse_pipeline_id: 0835f41e-4248-474c-802c-a8b892643d61
+      fact_transactions_pipeline_id: 41a42b76-489f-486e-8aa7-755d80a41f1d
+      inventory_historical_pipeline_id: bc27caff-b9bf-4af7-85d4-c7bbe178fa70
+      inventory_forecast_pipeline_id: e69fb378-312a-4ec1-9765-03c6222c222d
     workspace:
-      host: https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/
-      root_path: /Shared/smart_stock
-    permissions:
-      - user_name: lars.liahagen@databricks.com
-        level: CAN_MANAGE
-      - user_name: nam.nguyen@databricks.com
-        level: CAN_MANAGE
-      - user_name: fabien.contaminard@databricks.com
-        level: CAN_MANAGE
+      host: https://e2-demo-west.cloud.databricks.com/
+      root_path: "/Workspace/Demo Assets/Manufacturing/SmartStock - Inventory Management/smartstock"

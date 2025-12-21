@@ -1,2 +1,0 @@
-psycopg[binary,pool]
-databricks-sdk>=0.65.0
