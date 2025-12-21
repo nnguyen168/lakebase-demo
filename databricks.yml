@@ -37,7 +37,8 @@ targets:
       inventory_forecast_pipeline_id: e69fb378-312a-4ec1-9765-03c6222c222d
     workspace:
       host: https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/
-      profile: fe-vm-nam
+      # Note: For local dev, use --profile flag or set DATABRICKS_CONFIG_PROFILE env var
+      # In CI/CD, DATABRICKS_HOST and DATABRICKS_TOKEN env vars are used
 
   prod:
     mode: production
