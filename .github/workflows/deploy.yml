@@ -26,6 +26,17 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
           databricks --version
 
+      - name: Debug Secrets
+        run: |
+          echo "=== Debugging Secrets ==="
+          echo "DATABRICKS_HOST length: ${#DATABRICKS_HOST}"
+          echo "DATABRICKS_TOKEN length: ${#DATABRICKS_TOKEN}"
+          if [ -z "$DATABRICKS_HOST" ]; then echo "❌ DATABRICKS_HOST is empty!"; else echo "✅ DATABRICKS_HOST is set"; fi
+          if [ -z "$DATABRICKS_TOKEN" ]; then echo "❌ DATABRICKS_TOKEN is empty!"; else echo "✅ DATABRICKS_TOKEN is set"; fi
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST_DEV }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_DEV }}
+
       - name: Validate Bundle (Dev)
         run: databricks bundle validate -t dev
         env:
