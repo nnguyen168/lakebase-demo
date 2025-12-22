@@ -2,15 +2,19 @@
 
 # Deploy the Databricks App Template to Databricks.
 # For configuration options see README.md and .env.local.
-# Usage: ./deploy.sh [--verbose] [--create]
+# Usage: ./deploy.sh [dev|prod] [--verbose] [--create]
 
 set -e
 
 # Parse command line arguments
 VERBOSE=false
 CREATE_APP=false
+ENV=""
 for arg in "$@"; do
   case $arg in
+    dev|prod)
+      ENV="$arg"
+      ;;
     --verbose)
       VERBOSE=true
       echo "🔍 Verbose mode enabled"
@@ -21,11 +25,17 @@ for arg in "$@"; do
       ;;
     *)
       echo "Unknown argument: $arg"
-      echo "Usage: ./deploy.sh [--verbose] [--create]"
+      echo "Usage: ./deploy.sh [dev|prod] [--verbose] [--create]"
       exit 1
       ;;
   esac
 done
+
+# Default to dev if no environment specified
+if [ -z "$ENV" ]; then
+  ENV="dev"
+  echo "🌍 Environment: $ENV (default)"
+fi
 
 # Function to print timing info
 print_timing() {
@@ -34,14 +44,18 @@ print_timing() {
   fi
 }
 
-# Load environment variables from .env.local if it exists.
-print_timing "Loading environment variables"
-if [ -f .env.local ]
-then
-  set -a
-  source .env.local
+# Load environment-specific config
+if [ -f ".env.$ENV" ]; then
+  set -a  # Auto-export all variables
+  source ".env.$ENV"
   set +a
+else
+  echo "❌ .env.$ENV not found"
+  exit 1
 fi
+
+# Copy environment-specific app.yaml
+cp "app.$ENV.yaml" app.yaml
 
 # Validate required configuration
 if [ -z "$DBA_SOURCE_CODE_PATH" ]
@@ -66,6 +80,38 @@ fi
 print_timing "Starting authentication"
 echo "🔐 Authenticating with Databricks..."
 
+# Save current directory
+ORIG_DIR="$(pwd)"
+
+# Function to run databricks CLI from outside bundle directory to avoid config detection
+run_databricks() {
+  local current_dir="$(pwd)"
+  cd /tmp
+  if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
+    databricks "$@" --profile "$DATABRICKS_CONFIG_PROFILE"
+  else
+    databricks "$@"
+  fi
+  local result=$?
+  cd "$current_dir"
+  return $result
+}
+
+# Function to test auth from outside bundle directory
+test_databricks_auth() {
+  cd /tmp
+  local result
+  if [ "$DATABRICKS_AUTH_TYPE" = "pat" ]; then
+    DATABRICKS_HOST="$DATABRICKS_HOST" DATABRICKS_TOKEN="$DATABRICKS_TOKEN" databricks current-user me >/dev/null 2>&1
+    result=$?
+  else
+    databricks current-user me --profile "$DATABRICKS_CONFIG_PROFILE" >/dev/null 2>&1
+    result=$?
+  fi
+  cd "$ORIG_DIR"
+  return $result
+}
+
 if [ "$DATABRICKS_AUTH_TYPE" = "pat" ]; then
   # PAT Authentication
   if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_TOKEN" ]; then
@@ -78,7 +124,7 @@ if [ "$DATABRICKS_AUTH_TYPE" = "pat" ]; then
   export DATABRICKS_TOKEN="$DATABRICKS_TOKEN"
   
   # Test connection
-  if ! databricks current-user me >/dev/null 2>&1; then
+  if ! test_databricks_auth; then
     echo "❌ PAT authentication failed. Please check your credentials."
     echo "💡 Try running: databricks auth login --host $DATABRICKS_HOST"
     echo "💡 Or run ./setup.sh to reconfigure authentication"
@@ -93,9 +139,10 @@ elif [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
   fi
   
   echo "Using profile authentication: $DATABRICKS_CONFIG_PROFILE"
+  export DATABRICKS_CONFIG_PROFILE="$DATABRICKS_CONFIG_PROFILE"
   
   # Test connection
-  if ! databricks current-user me --profile "$DATABRICKS_CONFIG_PROFILE" >/dev/null 2>&1; then
+  if ! test_databricks_auth; then
     echo "❌ Profile authentication failed. Please check your profile configuration."
     echo "💡 Try running: databricks auth login --host <your-host> --profile $DATABRICKS_CONFIG_PROFILE"
     echo "💡 Or run ./setup.sh to reconfigure authentication"
@@ -115,7 +162,9 @@ display_app_info() {
   echo ""
   echo "📱 App Name: $DATABRICKS_APP_NAME"
   
-  # Get app URL
+  # Get app URL (run from /tmp to avoid bundle detection)
+  local current_dir="$(pwd)"
+  cd /tmp
   if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
     APP_URL=$(databricks apps get "$DATABRICKS_APP_NAME" --profile "$DATABRICKS_CONFIG_PROFILE" --output json 2>/dev/null | python3 -c "
 import json, sys
@@ -135,6 +184,7 @@ except:
     print('URL not available')
 " 2>/dev/null)
   fi
+  cd "$current_dir"
   
   echo "🌐 App URL: $APP_URL"
   echo ""
@@ -148,12 +198,14 @@ if [ "$CREATE_APP" = true ]; then
   print_timing "Starting app creation check"
   echo "🔍 Checking if app '$DATABRICKS_APP_NAME' exists..."
   
-  # Check if app exists
+  # Check if app exists (run from /tmp to avoid bundle detection)
+  cd /tmp
   if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
     APP_EXISTS=$(databricks apps list --profile "$DATABRICKS_CONFIG_PROFILE" 2>/dev/null | grep -c "^$DATABRICKS_APP_NAME " 2>/dev/null || echo "0")
   else
     APP_EXISTS=$(databricks apps list 2>/dev/null | grep -c "^$DATABRICKS_APP_NAME " 2>/dev/null || echo "0")
   fi
+  cd "$ORIG_DIR"
   
   # Clean up the variable (remove any whitespace/newlines)
   APP_EXISTS=$(echo "$APP_EXISTS" | head -1 | tr -d '\n')
@@ -162,28 +214,22 @@ if [ "$CREATE_APP" = true ]; then
     echo "❌ App '$DATABRICKS_APP_NAME' does not exist. Creating it..."
     echo "⏳ This may take several minutes..."
     
-    if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
-      if [ "$VERBOSE" = true ]; then
-        databricks apps create "$DATABRICKS_APP_NAME" --profile "$DATABRICKS_CONFIG_PROFILE"
-      else
-        databricks apps create "$DATABRICKS_APP_NAME" --profile "$DATABRICKS_CONFIG_PROFILE" > /dev/null 2>&1
-      fi
+    if [ "$VERBOSE" = true ]; then
+      run_databricks apps create "$DATABRICKS_APP_NAME"
     else
-      if [ "$VERBOSE" = true ]; then
-        databricks apps create "$DATABRICKS_APP_NAME"
-      else
-        databricks apps create "$DATABRICKS_APP_NAME" > /dev/null 2>&1
-      fi
+      run_databricks apps create "$DATABRICKS_APP_NAME" > /dev/null 2>&1
     fi
     
     echo "✅ App '$DATABRICKS_APP_NAME' created successfully"
     
     # Verify creation
+    cd /tmp
     if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
       APP_EXISTS=$(databricks apps list --profile "$DATABRICKS_CONFIG_PROFILE" | grep -c "^$DATABRICKS_APP_NAME " || echo "0")
     else
       APP_EXISTS=$(databricks apps list | grep -c "^$DATABRICKS_APP_NAME " || echo "0")
     fi
+    cd "$ORIG_DIR"
     
     if [ "$APP_EXISTS" -eq 0 ]; then
       echo "❌ Failed to create app '$DATABRICKS_APP_NAME'"
@@ -231,19 +277,15 @@ echo "✅ Frontend files copied to build/"
 # Create workspace directory and upload source
 print_timing "Starting workspace setup"
 echo "📂 Creating workspace directory..."
-if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
-  databricks workspace mkdirs "$DBA_SOURCE_CODE_PATH" --profile "$DATABRICKS_CONFIG_PROFILE"
-else
-  databricks workspace mkdirs "$DBA_SOURCE_CODE_PATH"
-fi
+run_databricks workspace mkdirs "$DBA_SOURCE_CODE_PATH"
 echo "✅ Workspace directory created"
 
 echo "📤 Syncing source code to workspace..."
-# Use databricks sync to properly update all files including requirements.txt
+# Use databricks sync - need to run from current dir for file access
 if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
-  databricks sync . "$DBA_SOURCE_CODE_PATH" --profile "$DATABRICKS_CONFIG_PROFILE"
+  DATABRICKS_BUNDLE_ROOT="" databricks sync . "$DBA_SOURCE_CODE_PATH" --profile "$DATABRICKS_CONFIG_PROFILE"
 else
-  databricks sync . "$DBA_SOURCE_CODE_PATH"
+  DATABRICKS_BUNDLE_ROOT="" databricks sync . "$DBA_SOURCE_CODE_PATH"
 fi
 echo "✅ Source code uploaded"
 print_timing "Workspace setup completed"
@@ -252,18 +294,10 @@ print_timing "Workspace setup completed"
 print_timing "Starting Databricks deployment"
 echo "🚀 Deploying to Databricks..."
 
-if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
-  if [ "$VERBOSE" = true ]; then
-    databricks apps deploy "$DATABRICKS_APP_NAME" --source-code-path "$DBA_SOURCE_CODE_PATH" --debug --profile "$DATABRICKS_CONFIG_PROFILE"
-  else
-    databricks apps deploy "$DATABRICKS_APP_NAME" --source-code-path "$DBA_SOURCE_CODE_PATH" --profile "$DATABRICKS_CONFIG_PROFILE"
-  fi
+if [ "$VERBOSE" = true ]; then
+  run_databricks apps deploy "$DATABRICKS_APP_NAME" --source-code-path "$DBA_SOURCE_CODE_PATH" --debug
 else
-  if [ "$VERBOSE" = true ]; then
-    databricks apps deploy "$DATABRICKS_APP_NAME" --source-code-path "$DBA_SOURCE_CODE_PATH" --debug
-  else
-    databricks apps deploy "$DATABRICKS_APP_NAME" --source-code-path "$DBA_SOURCE_CODE_PATH"
-  fi
+  run_databricks apps deploy "$DATABRICKS_APP_NAME" --source-code-path "$DBA_SOURCE_CODE_PATH"
 fi
 print_timing "Databricks deployment completed"
 
@@ -271,8 +305,9 @@ echo ""
 echo "✅ Deployment complete!"
 echo ""
 
-# Get the actual app URL from the apps list
+# Get the actual app URL from the apps list (run from /tmp to avoid bundle detection)
 echo "🔍 Getting app URL..."
+cd /tmp
 if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
   APP_URL=$(databricks apps list --profile "$DATABRICKS_CONFIG_PROFILE" --output json 2>/dev/null | python3 -c "
 import json, sys
@@ -304,6 +339,7 @@ try:
 except: pass
 " 2>/dev/null)
 fi
+cd "$ORIG_DIR"
 
 if [ -n "$APP_URL" ]; then
   echo "Your app is available at:"

@@ -80,6 +80,15 @@ async def health():
   }
 
 
+@app.get('/api/config')
+async def get_config():
+  """Get frontend configuration from environment variables."""
+  return {
+    'dashboardEmbedUrl': os.environ.get('DASHBOARD_EMBED_URL', ''),
+    'databricksHost': os.environ.get('DATABRICKS_HOST', ''),
+  }
+
+
 @app.get('/debug/env')
 async def debug_env():
   """Debug endpoint to check environment variables."""

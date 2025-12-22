@@ -61,6 +61,7 @@ const SmartStockDashboard: React.FC = () => {
   const { displayName, role } = useUserInfo();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('homepage');
+  const [dashboardEmbedUrl, setDashboardEmbedUrl] = useState<string>('');
   const [kpis, setKpis] = useState<ElenaKPIs>({
     onTimeProductionRate: 0,
     onTimeProductionRatePrev: 0,
@@ -171,6 +172,24 @@ const SmartStockDashboard: React.FC = () => {
       console.error('Error fetching dropdown data:', error);
     }
   };
+
+  // Fetch app config (dashboard URL, etc.) on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch('/api/config');
+        if (response.ok) {
+          const config = await response.json();
+          if (config.dashboardEmbedUrl) {
+            setDashboardEmbedUrl(config.dashboardEmbedUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching config:', error);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   useEffect(() => {
     loadDashboardData();
@@ -1464,14 +1483,20 @@ const SmartStockDashboard: React.FC = () => {
                   https://<workspace>.cloud.databricks.com/embed/dashboards/<dashboard-id>?token=<token>
                 */}
                 <div className="relative w-full" style={{ height: '600px' }}>
-                  <iframe
-                    src="https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/embed/dashboardsv3/01f0b5a263581d55a2343f75a6b7b5c5?o=813231423035746"
-                    title="Databricks Analytics Dashboard"
-                    className="absolute top-0 left-0 w-full h-full border-0"
-                    allowFullScreen
-                    loading="lazy"
-                    sandbox="allow-scripts allow-same-origin allow-popups"
-                  />
+                  {dashboardEmbedUrl ? (
+                    <iframe
+                      src={dashboardEmbedUrl}
+                      title="Databricks Analytics Dashboard"
+                      className="absolute top-0 left-0 w-full h-full border-0"
+                      allowFullScreen
+                      loading="lazy"
+                      sandbox="allow-scripts allow-same-origin allow-popups"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                      <p className="text-gray-500">Loading dashboard...</p>
+                    </div>
+                  )}
                   {/* Fallback message if iframe doesn't load */}
                   <div className="absolute inset-0 flex items-center justify-center bg-gray-50 -z-10">
                     <div className="text-center">

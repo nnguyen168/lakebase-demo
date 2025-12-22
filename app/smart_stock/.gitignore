@@ -121,6 +121,7 @@ celerybeat.pid
 # Environments
 .env
 .env.local
+.env.*
 .venv
 env/
 venv/
@@ -295,3 +296,7 @@ mlartifacts/
 
 # Generated client
 client/src/client/
+
+app.yaml
+app.*.yaml
+.databricksignore
