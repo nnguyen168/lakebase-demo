@@ -282,12 +282,28 @@ echo "✅ Workspace directory created"
 
 echo "📤 Syncing source code to workspace..."
 # Use databricks sync - need to run from current dir for file access
+# Note: app.yaml is in .gitignore so it won't be synced - we upload it separately below
 if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
   DATABRICKS_BUNDLE_ROOT="" databricks sync . "$DBA_SOURCE_CODE_PATH" --profile "$DATABRICKS_CONFIG_PROFILE"
 else
   DATABRICKS_BUNDLE_ROOT="" databricks sync . "$DBA_SOURCE_CODE_PATH"
 fi
-echo "✅ Source code uploaded"
+echo "✅ Source code synced"
+
+# Manually upload app.yaml (it's in .gitignore so databricks sync skips it)
+# This uploads ONLY app.yaml (which was copied from app.$ENV.yaml)
+echo "📤 Uploading app.yaml configuration..."
+# Copy app.yaml to /tmp to run import from there (avoids bundle config detection)
+cp app.yaml /tmp/app.yaml
+cd /tmp
+if [ "$DATABRICKS_AUTH_TYPE" = "databricks-cli" ]; then
+  databricks workspace import "$DBA_SOURCE_CODE_PATH/app.yaml" --file app.yaml --format RAW --overwrite --profile "$DATABRICKS_CONFIG_PROFILE"
+else
+  databricks workspace import "$DBA_SOURCE_CODE_PATH/app.yaml" --file app.yaml --format RAW --overwrite
+fi
+cd "$ORIG_DIR"
+rm /tmp/app.yaml
+echo "✅ app.yaml uploaded"
 print_timing "Workspace setup completed"
 
 # Deploy to Databricks

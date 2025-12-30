@@ -297,6 +297,8 @@ mlartifacts/
 # Generated client
 client/src/client/
 
+# App config files (contain secrets - uploaded manually by deploy script)
 app.yaml
 app.*.yaml
+
 .databricksignore
