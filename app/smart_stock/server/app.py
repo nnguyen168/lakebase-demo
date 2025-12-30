@@ -86,6 +86,7 @@ async def get_config():
   return {
     'dashboardEmbedUrl': os.environ.get('DASHBOARD_EMBED_URL', ''),
     'databricksHost': os.environ.get('DATABRICKS_HOST', ''),
+    'resetDemoJobUrl': os.environ.get('RESET_DEMO_JOB_URL', ''),
   }
 
 

@@ -62,6 +62,7 @@ const SmartStockDashboard: React.FC = () => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('homepage');
   const [dashboardEmbedUrl, setDashboardEmbedUrl] = useState<string>('');
+  const [resetDemoJobUrl, setResetDemoJobUrl] = useState<string>('');
   const [kpis, setKpis] = useState<ElenaKPIs>({
     onTimeProductionRate: 0,
     onTimeProductionRatePrev: 0,
@@ -182,6 +183,9 @@ const SmartStockDashboard: React.FC = () => {
           const config = await response.json();
           if (config.dashboardEmbedUrl) {
             setDashboardEmbedUrl(config.dashboardEmbedUrl);
+          }
+          if (config.resetDemoJobUrl) {
+            setResetDemoJobUrl(config.resetDemoJobUrl);
           }
         }
       } catch (error) {
@@ -774,16 +778,18 @@ const SmartStockDashboard: React.FC = () => {
                 <Clock className="w-3 h-3 mr-1" />
                 Last updated: {new Date().toLocaleTimeString()}
               </Badge>
-              <a
-                href="https://fe-vm-nam-nguyen-workspace-classic.cloud.databricks.com/jobs/60972489698708?o=813231423035746"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Badge variant="outline" className="px-3 py-1 cursor-pointer hover:bg-gray-50 transition-colors">
-                  <RotateCcw className="w-3 h-3 mr-1" />
-                  Reset Demo
-                </Badge>
-              </a>
+{resetDemoJobUrl && (
+                <a
+                  href={resetDemoJobUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Badge variant="outline" className="px-3 py-1 cursor-pointer hover:bg-gray-50 transition-colors">
+                    <RotateCcw className="w-3 h-3 mr-1" />
+                    Reset Demo
+                  </Badge>
+                </a>
+              )}
               <div className="text-right">
                 <p className="text-sm font-medium">{displayName}</p>
                 <p className="text-xs text-gray-600">{role}</p>
