@@ -53,6 +53,14 @@ app.add_middleware(
   allow_headers=['*'],
 )
 
+# Add demo tracking for Databricks internal analytics
+# Only tracks @databricks.com emails, data is anonymized at team level
+try:
+  from dbdemos_tracker import Tracker
+  Tracker.add_tracker_fastapi(app, "smartstock", demo_catalog_id="10217")
+except Exception as e:
+  print(f"Demo tracker not available: {e}")
+
 app.include_router(router, prefix='/api', tags=['api'])
 app.include_router(genie.router)
 app.include_router(agent.router)
