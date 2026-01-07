@@ -530,7 +530,7 @@ class BronzeDataGenerator:
             7: 1.3, 8: 1.1, 9: 1.0, 10: 0.8, 11: 0.6, 12: 0.5
         }
         
-        # Growth trends
+        # Growth trends (future years default to 1.2)
         growth_trends = {2022: 0.7, 2023: 0.9, 2024: 1.0, 2025: 1.1}
         
         # Day of week patterns
@@ -543,7 +543,7 @@ class BronzeDataGenerator:
             
             # Calculate daily activity level
             seasonal = seasonal_patterns[current_date.month]
-            growth = growth_trends[current_date.year]
+            growth = growth_trends.get(current_date.year, 1.2)  # Default 1.2 for future years
             dow = dow_patterns[current_date.weekday()]
             
             daily_activity = seasonal * growth * dow
