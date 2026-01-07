@@ -2,6 +2,12 @@ resources:
   jobs:
     data_initialization:
       name: "[${bundle.target}] SmartStock Data Initialization"
+      
+      # Grant permissions to all workspace users to run this job
+      permissions:
+        - group_name: users
+          level: CAN_MANAGE_RUN
+      
       tasks:
         - task_key: bronze_tables
           notebook_task:
