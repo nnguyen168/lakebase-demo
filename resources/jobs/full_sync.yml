@@ -8,12 +8,26 @@ resources:
         - group_name: users
           level: CAN_MANAGE_RUN
 
+      # Run every day at midnight UTC
+      schedule:
+        quartz_cron_expression: "0 0 0 * * ?"
+        timezone_id: UTC
+        pause_status: UNPAUSED
+
+      # Email notifications for job status
+      email_notifications:
+        on_success:
+          - nam.nguyen@databricks.com
+        on_failure:
+          - nam.nguyen@databricks.com
+
       job_clusters:
         - job_cluster_key: ml_cluster
           new_cluster:
             spark_version: 16.4.x-cpu-ml-scala2.12  # ML runtime version
             node_type_id: rd-fleet.xlarge
             num_workers: 8
+            data_security_mode: SINGLE_USER  # Required for Unity Catalog access
             aws_attributes:
               first_on_demand: 1
               availability: SPOT_WITH_FALLBACK
