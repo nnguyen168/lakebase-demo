@@ -1,11 +1,15 @@
 """PostgreSQL/Lakebase connection module for food & beverage inventory."""
 
-import os
 import logging
-from typing import Optional, Any, Dict, List
+import os
+import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 import psycopg2
+import requests
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 
@@ -22,48 +26,164 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def _normalize_databricks_host() -> str:
+    h = (os.getenv("DATABRICKS_HOST") or "").strip().rstrip("/")
+    if not h:
+        raise ValueError("DATABRICKS_HOST must be set to mint OAuth tokens for Lakebase")
+    if not h.startswith("http"):
+        h = f"https://{h}"
+    return h
+
+
+def _m2m_access_token() -> Tuple[str, int]:
+    """OAuth client-credentials token for the app service principal. Returns (token, expires_in_seconds)."""
+    host = _normalize_databricks_host()
+    client_id = os.getenv("DATABRICKS_CLIENT_ID", "")
+    client_secret = os.getenv("DATABRICKS_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        raise ValueError("DATABRICKS_CLIENT_ID and DATABRICKS_CLIENT_SECRET must be set for Lakebase OAuth")
+    url = f"{host}/oidc/v1/token"
+    resp = requests.post(
+        url,
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": "all-apis",
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=30,
+    )
+    if not resp.ok:
+        logger.error("OIDC token request failed: %s %s", resp.status_code, resp.text[:500])
+        resp.raise_for_status()
+    body = resp.json()
+    return str(body["access_token"]), int(body.get("expires_in", 3600))
+
+
+def lakebase_psycopg2_connect_kwargs() -> Dict[str, Any]:
+    """Build kwargs for psycopg2.connect (single-shot use, e.g. debug). Caller closes the connection."""
+    if os.getenv("PGHOST") and os.getenv("PGUSER"):
+        token, _ = _m2m_access_token()
+        return {
+            "host": os.environ["PGHOST"],
+            "port": int(os.getenv("PGPORT", "5432")),
+            "database": os.getenv("PGDATABASE") or os.getenv("DB_NAME", "databricks_postgres"),
+            "user": os.environ["PGUSER"],
+            "password": token,
+            "sslmode": os.getenv("PGSSLMODE", "require"),
+        }
+    if not all([os.getenv("DB_HOST"), os.getenv("DB_USER"), os.getenv("DB_PASSWORD")]):
+        raise ValueError("Set PGHOST+PGUSER (App resource) or DB_HOST+DB_USER+DB_PASSWORD")
+    return {
+        "host": os.environ["DB_HOST"],
+        "port": int(os.getenv("DB_PORT", "5432")),
+        "database": os.getenv("DB_NAME", "databricks_postgres"),
+        "user": os.environ["DB_USER"],
+        "password": os.environ["DB_PASSWORD"],
+        "sslmode": "require",
+    }
+
+
 class LakebasePostgresConnection:
     """Manages connections to Lakebase (PostgreSQL-compatible) database."""
 
     def __init__(self):
         """Initialize Lakebase PostgreSQL connection pool."""
-        self.db_config = {
-            "host": os.getenv("DB_HOST"),
-            "port": int(os.getenv("DB_PORT", 5432)),
-            "database": os.getenv("DB_NAME", "databricks_postgres"),
-            "user": os.getenv("DB_USER"),
-            "password": os.getenv("DB_PASSWORD"),
-            "sslmode": "require",  # SSL is required for Lakebase
-        }
-
-        # Get schema from environment
         self.schema = os.getenv("DB_SCHEMA", "public")
+        self._pool_lock = threading.Lock()
+        self._app_resource_mode = bool(os.getenv("PGHOST") and os.getenv("PGUSER"))
+        self._base_params: Dict[str, Any]
+        self._legacy_password: Optional[str] = None
+        self._cached_oauth_token: Optional[str] = None
+        self._oauth_token_until_monotonic: float = 0.0
+        self.connection_pool: Optional[pool.ThreadedConnectionPool] = None
 
-        # Validate configuration
-        if not all([self.db_config["host"], self.db_config["user"], self.db_config["password"]]):
-            raise ValueError("DB_HOST, DB_USER, and DB_PASSWORD must be set in environment variables")
+        if self._app_resource_mode:
+            _normalize_databricks_host()
+            if not os.getenv("DATABRICKS_CLIENT_ID") or not os.getenv("DATABRICKS_CLIENT_SECRET"):
+                raise ValueError(
+                    "PGHOST/PGUSER require DATABRICKS_CLIENT_ID and DATABRICKS_CLIENT_SECRET for OAuth"
+                )
+            self._base_params = {
+                "host": os.environ["PGHOST"],
+                "port": int(os.getenv("PGPORT", "5432")),
+                "database": os.getenv("PGDATABASE") or os.getenv("DB_NAME", "databricks_postgres"),
+                "user": os.environ["PGUSER"],
+                "sslmode": os.getenv("PGSSLMODE", "require"),
+            }
+            try:
+                with self._pool_lock:
+                    self._prime_oauth_token()
+                logger.info(
+                    "Lakebase OAuth ready for %s (per-request connections; token refresh before expiry)",
+                    self._base_params["host"],
+                )
+            except Exception as e:
+                logger.error("Failed to obtain Lakebase OAuth token: %s", e)
+                raise
+        else:
+            if not all([os.getenv("DB_HOST"), os.getenv("DB_USER"), os.getenv("DB_PASSWORD")]):
+                raise ValueError("DB_HOST, DB_USER, and DB_PASSWORD must be set when PGHOST/PGUSER are not set")
+            self._legacy_password = os.environ["DB_PASSWORD"]
+            self._base_params = {
+                "host": os.environ["DB_HOST"],
+                "port": int(os.getenv("DB_PORT", "5432")),
+                "database": os.getenv("DB_NAME", "databricks_postgres"),
+                "user": os.environ["DB_USER"],
+                "sslmode": "require",
+            }
+            try:
+                kw = {**self._base_params, "password": self._legacy_password}
+                self.connection_pool = pool.ThreadedConnectionPool(minconn=1, maxconn=20, **kw)
+                logger.info("Connected to Lakebase PostgreSQL at %s (pooled, legacy DB_* env)", kw["host"])
+            except Exception as e:
+                logger.error("Failed to create connection pool: %s", e)
+                raise
 
-        # Create connection pool
-        try:
-            self.connection_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=1,
-                maxconn=20,
-                **self.db_config
-            )
-            logger.info(f"Connected to Lakebase PostgreSQL at {self.db_config['host']}")
-        except Exception as e:
-            logger.error(f"Failed to create connection pool: {e}")
-            raise
+    def _oauth_refresh_deadline(self, expires_in: int) -> float:
+        """Re-mint token several minutes before OIDC expiry (OAuth tokens are ~1 hour)."""
+        delta = max(900, min(int(expires_in) - 600, 3000))
+        return time.monotonic() + delta
+
+    def _prime_oauth_token(self) -> None:
+        """Fetch and cache a new OAuth token. Caller must hold self._pool_lock."""
+        token, expires_in = _m2m_access_token()
+        self._cached_oauth_token = token
+        self._oauth_token_until_monotonic = self._oauth_refresh_deadline(expires_in)
+
+    def _ensure_oauth_token(self) -> None:
+        if not self._app_resource_mode:
+            return
+        if time.monotonic() < self._oauth_token_until_monotonic and self._cached_oauth_token:
+            return
+        with self._pool_lock:
+            if time.monotonic() < self._oauth_token_until_monotonic and self._cached_oauth_token:
+                return
+            logger.info("Refreshing Lakebase OAuth token for Postgres")
+            self._prime_oauth_token()
 
     @contextmanager
     def get_connection(self):
         """Context manager for database connections."""
+        if self._app_resource_mode:
+            self._ensure_oauth_token()
+            assert self._cached_oauth_token is not None
+            kw = {**self._base_params, "password": self._cached_oauth_token}
+            conn = psycopg2.connect(**kw)
+            try:
+                yield conn
+            finally:
+                conn.close()
+            return
+
         connection = None
+        assert self.connection_pool is not None
         try:
             connection = self.connection_pool.getconn()
             yield connection
         finally:
-            if connection:
+            if connection and self.connection_pool is not None:
                 self.connection_pool.putconn(connection)
 
     @contextmanager
@@ -721,9 +841,14 @@ class LakebasePostgresConnection:
 
     def close(self):
         """Close all connections in the pool."""
-        if hasattr(self, 'connection_pool'):
-            self.connection_pool.closeall()
-            logger.info("Connection pool closed")
+        with self._pool_lock:
+            if self.connection_pool is not None:
+                try:
+                    self.connection_pool.closeall()
+                except Exception:
+                    pass
+                self.connection_pool = None
+        logger.info("Connection pool closed")
 
 
 # Global database instance

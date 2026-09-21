@@ -1,7 +1,7 @@
 resources:
   jobs:
     full_sync:
-      name: "[${bundle.target}] SmartStock - Full Sync"
+      name: "[${bundle.target}] SmartStock - Full Sync - DO NOT DELETE"
       
       # Grant permissions to all workspace users to run this job
       permissions:

@@ -1,6 +1,7 @@
 """Debug endpoint to check database connection."""
 
 import os
+
 import psycopg2
 from fastapi import APIRouter
 
@@ -9,11 +10,14 @@ router = APIRouter(prefix="/debug", tags=["debug"])
 @router.get("/test-products")
 async def test_products():
     """Direct test of products query."""
-    import psycopg2
     from psycopg2.extras import RealDictCursor
+
+    from ..postgres_database import lakebase_psycopg2_connect_kwargs
 
     result = {
         "env": {
+            "PGHOST": os.getenv("PGHOST", "NOT SET"),
+            "PGUSER": os.getenv("PGUSER", "NOT SET"),
             "DB_HOST": os.getenv("DB_HOST", "NOT SET"),
             "DB_USER": os.getenv("DB_USER", "NOT SET"),
         },
@@ -24,13 +28,7 @@ async def test_products():
 
     # Try direct query
     try:
-        conn = psycopg2.connect(
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT", 5432),
-            database=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD")
-        )
+        conn = psycopg2.connect(**lakebase_psycopg2_connect_kwargs())
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("SELECT COUNT(*) as count FROM products")
         result["direct_query"] = cur.fetchone()
@@ -53,14 +51,18 @@ async def test_products():
 async def check_db_status():
     """Check database connection status and configuration."""
 
-    # Check environment variables
+    # Check environment variables (no secret values)
     env_vars = {
+        "PGHOST": os.getenv("PGHOST", "NOT SET"),
+        "PGUSER": os.getenv("PGUSER", "NOT SET"),
+        "PGDATABASE": os.getenv("PGDATABASE", "NOT SET"),
         "DB_HOST": os.getenv("DB_HOST", "NOT SET"),
         "DB_PORT": os.getenv("DB_PORT", "NOT SET"),
         "DB_NAME": os.getenv("DB_NAME", "NOT SET"),
         "DB_USER": os.getenv("DB_USER", "NOT SET"),
-        "DB_PASSWORD": "***" if os.getenv("DB_PASSWORD") else "NOT SET",
-        "DB_SSL_MODE": os.getenv("DB_SSL_MODE", "prefer (default)"),
+        "DATABRICKS_CLIENT_ID": (os.getenv("DATABRICKS_CLIENT_ID", "NOT SET")[:12] + "…")
+        if os.getenv("DATABRICKS_CLIENT_ID")
+        else "NOT SET",
     }
 
     # Try to connect and run a simple query
@@ -87,26 +89,13 @@ async def check_db_status():
 
         # Try direct connection to get more details
         try:
-            conn_str = f"host={os.getenv('DB_HOST')} port={os.getenv('DB_PORT', 5432)} dbname={os.getenv('DB_NAME')} user={os.getenv('DB_USER')} password={os.getenv('DB_PASSWORD')}"
+            from ..postgres_database import lakebase_psycopg2_connect_kwargs
 
-            # Try without SSL first
-            try:
-                conn = psycopg2.connect(conn_str)
-                connection_details["direct_no_ssl"] = "Success"
-                conn.close()
-            except Exception as e:
-                connection_details["direct_no_ssl"] = f"Failed: {str(e)[:100]}"
-
-            # Try with SSL
-            try:
-                conn = psycopg2.connect(conn_str + " sslmode=require")
-                connection_details["direct_with_ssl"] = "Success"
-                conn.close()
-            except Exception as e:
-                connection_details["direct_with_ssl"] = f"Failed: {str(e)[:100]}"
-
+            conn = psycopg2.connect(**lakebase_psycopg2_connect_kwargs())
+            connection_details["direct_with_ssl"] = "Success"
+            conn.close()
         except Exception as e:
-            connection_details["direct_connection"] = f"Failed: {str(e)[:100]}"
+            connection_details["direct_with_ssl"] = f"Failed: {str(e)[:100]}"
 
     return {
         "status": connection_status,

@@ -101,18 +101,22 @@ async def get_config():
 @app.get('/debug/env')
 async def debug_env():
   """Debug endpoint to check environment variables."""
+  app_resource = bool(os.getenv('PGHOST') and os.getenv('PGUSER'))
+  legacy = all([os.getenv('DB_HOST'), os.getenv('DB_USER'), os.getenv('DB_PASSWORD')])
   return {
-    'db_configured': bool(os.getenv('DB_HOST')),
-    'db_host': os.getenv('DB_HOST', 'Not set')[:50],  # Truncate for security
+    'db_app_resource_mode': app_resource,
+    'db_configured': app_resource or legacy,
+    'pg_host': (os.getenv('PGHOST') or 'Not set')[:50],
+    'pg_user': os.getenv('PGUSER', 'Not set'),
+    'db_host': (os.getenv('DB_HOST') or 'Not set')[:50],
     'db_user': os.getenv('DB_USER', 'Not set'),
+    'oauth_client_configured': bool(
+      os.getenv('DATABRICKS_CLIENT_ID') and os.getenv('DATABRICKS_CLIENT_SECRET')
+    ),
     'db_password_present': bool(os.getenv('DB_PASSWORD')),
-    'db_name': os.getenv('DB_NAME', 'Not set'),
-    'db_port': os.getenv('DB_PORT', 'Not set'),
-    'using_real_db': all([
-      os.getenv('DB_HOST'),
-      os.getenv('DB_USER'),
-      os.getenv('DB_PASSWORD')
-    ])
+    'db_name': os.getenv('PGDATABASE') or os.getenv('DB_NAME', 'Not set'),
+    'db_port': os.getenv('PGPORT') or os.getenv('DB_PORT', 'Not set'),
+    'using_real_db': app_resource or legacy,
   }
 
 @app.get('/test-api')
@@ -130,15 +134,9 @@ async def debug_db_test():
   from psycopg2.extras import RealDictCursor
 
   try:
-    # Get environment variables
-    db_config = {
-      "host": os.getenv("DB_HOST"),
-      "port": int(os.getenv("DB_PORT", 5432)),
-      "database": os.getenv("DB_NAME", "databricks_postgres"),
-      "user": os.getenv("DB_USER"),
-      "password": os.getenv("DB_PASSWORD"),
-      "sslmode": "require",
-    }
+    from server.postgres_database import lakebase_psycopg2_connect_kwargs
+
+    db_config = lakebase_psycopg2_connect_kwargs()
 
     # Try to connect
     conn = psycopg2.connect(**db_config, cursor_factory=RealDictCursor)
@@ -165,14 +163,14 @@ async def debug_db_test():
       'transaction_count': transaction_count,
       'product_count': product_count,
       'warehouse_count': warehouse_count,
-      'db_host': db_config['host'][:30] if db_config['host'] else 'None'
+      'db_host': (db_config.get('host') or '')[:30] or 'None'
     }
   except Exception as e:
     return {
       'connection': 'failed',
       'error': str(e),
-      'db_host': os.getenv('DB_HOST', 'Not set')[:30] if os.getenv('DB_HOST') else 'None',
-      'db_user': os.getenv('DB_USER', 'Not set')
+      'db_host': (os.getenv('PGHOST') or os.getenv('DB_HOST') or 'Not set')[:30],
+      'db_user': os.getenv('PGUSER') or os.getenv('DB_USER', 'Not set')
     }
 
 

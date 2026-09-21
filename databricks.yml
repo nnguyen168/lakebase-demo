@@ -61,11 +61,11 @@ targets:
     variables:
       catalog_name: manufacturing
       lakebase_instance_name: smartstock
-      dim_product_pipeline_id: 83b337f1-bcf0-4007-9b2d-6ffad7d73563
-      dim_warehouse_pipeline_id: eeb0021f-d11c-4c22-9ebb-eac02e38f0ed
-      fact_transactions_pipeline_id: 013ee9fa-3bd4-4746-b26e-ebb90310d32d
-      inventory_historical_pipeline_id: 572d98bd-d53d-4877-93e5-321537c21d77
-      inventory_forecast_pipeline_id: eea4cc2e-7c8e-4f28-b6ef-886f83f49d8f
+      dim_product_pipeline_id: f8c722b1-a0c6-4bc7-a391-1f731203bc77
+      dim_warehouse_pipeline_id: 75cf507e-3cde-45ea-bf0e-cab43dec715c
+      fact_transactions_pipeline_id: 9d135079-48fe-48c5-8ed4-d6f738ca9e60
+      inventory_historical_pipeline_id: 80056767-f764-43e1-9f6f-23f760942378
+      inventory_forecast_pipeline_id: 94fa3cde-8e13-48ef-8725-7ff856632193
     workspace:
       host: https://e2-demo-west.cloud.databricks.com/
       profile: e2-demo-west

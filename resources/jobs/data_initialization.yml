@@ -1,7 +1,7 @@
 resources:
   jobs:
     data_initialization:
-      name: "[${bundle.target}] SmartStock Data Initialization"
+      name: "[${bundle.target}] SmartStock Data Initialization - DO NOT DELETE"
       
       # Grant permissions to all workspace users to run this job
       permissions:
